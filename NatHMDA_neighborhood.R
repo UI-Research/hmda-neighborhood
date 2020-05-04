@@ -9,23 +9,27 @@
 ## ---------------------------
 
 library(tidyverse)
-library(noncensus)
+#library(noncensus)
 
 # Set working directory
+# MM: If you open an R project from RStudio (File -> Open Project...) you can use relative file paths within the project and dont need to set working directory
 setwd("D:/NATDATA/HMDA")
 
 
 # Read national file and add county code
 nathmda_in <- read.csv("L:/Libraries/HMDA/Raw/2018_lar.txt",sep="|",nrows=20000)
-nathmda_clean <- mutate(nathmda_in, ucounty =str_pad(county_code, 5, pad = "0"))
+nathmda_clean <- mutate(nathmda_in, ucounty =str_pad(county_code, 5, pad = "0")) 
 
 # Read income limits file and define max limits for each county
-il_in <- read.csv("D:/NATDATA/hmda-neighborhood/Income Limits/Section8-FY18.csv")
+# MM: Am reading in Section8-FY18.csv using relative file path
+# il_in <- read.csv("D:/NATDATA/hmda-neighborhood/Income Limits/Section8-FY18.csv")
+il_in <- read.csv("Income Limits/Section8-FY18.csv")
+# MM: rather than using mutate to create new columns for vlowmax and lowmax, you can rename the old columns using dplyr function 'rename' https://dplyr.tidyverse.org/reference/select.html
 il_clean <- mutate(il_in, st_in =str_pad(State, 2, pad = "0"),
                    cnt_in =str_pad(County, 3, pad = "0"),
                    ucounty = paste0(st_in, cnt_in),
                    #Very low income max (Under 50% AMI)
-                   vlowmax= l50_4,
+                   vlowmax= l50_4, 
                    #Low income max (50-80% AMI)
                    lowmax= l80_4,
                    #Medium income max (80-100% AMI)
@@ -35,7 +39,9 @@ il_clean <- mutate(il_in, st_in =str_pad(State, 2, pad = "0"),
 
 
 # Load county list from noncensus package
-data(counties)
+# MM: am now reading the counties rds file provided by Rob rather than getting it from the noncensus package
+# data(counties)
+counties <- readRDS("counties.rds")
 counties2 = data.frame(counties) %>% 
   unite(ucounty, state_fips,county_fips, sep = "", remove = FALSE)
 
@@ -69,6 +75,7 @@ nathmda_flags <-merge(nathmda_geo, il_clean, by.x="ucounty", by.y="ucounty", all
           lein1_flag = if_else(lien_status==1,1,0),
           
           #SF home flag
+          # MM: when using or (|) statements for one variable, you can alternatively use check if the variable is in a list, for example, if_else(variable %in% c('option1','option2'),... ,...)
           sf_flag = if_else(derived_dwelling_category=='Single Family (1-4 Units):Site-Built' | derived_dwelling_category=='Single Family (1-4 Units):Manufactured',1,0),
           
           #Owner occupancy flag
@@ -89,7 +96,14 @@ nathmda_flags <-merge(nathmda_geo, il_clean, by.x="ucounty", by.y="ucounty", all
           #Keep only SF (1-4unit) homes
           sf_flag ==1)
           
-
+# MM: rather than the three separate functions, you can have one function that takes in a variable numer of arguments using the elipses (...)
+create_all_comb <- function(...){
+  # MM: Then convert the function arguments to a list
+  all_vars <- list(...)
+  # MM: Then check that all of the variables in the list equal one, and set vname based on that
+  vname=if_else(all(all_vars==1), 1, 0)
+  return(vname)
+}
 
 # Functions to combine multiple variables based on flags
 create2comb <- function(v1,v2){
@@ -197,6 +211,7 @@ nathmda_comb <- nathmda_flags %>%
   mutate(othrace_highinc=create4comb(othrace_flag,highinc_flag,owner_flag,purch_flag))
   
 
+# MM: what is the purpose of this function? If not being used then you can remove
 createsum <- function(vname,var){
   vname=sum(var)}
 
