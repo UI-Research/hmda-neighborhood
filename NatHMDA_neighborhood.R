@@ -17,13 +17,15 @@ setwd("D:/NATDATA/HMDA")
 
 
 # Read national file and add county code
-nathmda_in <- read.csv("L:/Libraries/HMDA/Raw/2018_lar.txt",sep="|",nrows=20000)
+#nathmda_in <- read.csv("L:/Libraries/HMDA/Raw/2018_lar.txt",sep="|",nrows=20000)
+nathmda_in <- read.csv("2018_lar.txt",sep="|") %>%
+  filter(state_code=="DC")
 nathmda_clean <- mutate(nathmda_in, ucounty =str_pad(county_code, 5, pad = "0")) 
 
 # Read income limits file and define max limits for each county
 # MM: Am reading in Section8-FY18.csv using relative file path
 # il_in <- read.csv("D:/NATDATA/hmda-neighborhood/Income Limits/Section8-FY18.csv")
-il_in <- read.csv("Income Limits/Section8-FY18.csv")
+il_in <- read.csv("Income Limits/Section8-FY18.csv") 
 # MM: rather than using mutate to create new columns for vlowmax and lowmax, you can rename the old columns using dplyr function 'rename' https://dplyr.tidyverse.org/reference/select.html
 il_clean <- mutate(il_in, st_in =str_pad(State, 2, pad = "0"),
                    cnt_in =str_pad(County, 3, pad = "0"),
@@ -94,7 +96,7 @@ nathmda_flags <-merge(nathmda_geo, il_clean, by.x="ucounty", by.y="ucounty", all
           lein1_flag == 1,
           
           #Keep only SF (1-4unit) homes
-          sf_flag ==1)
+          sf_flag ==1)  
           
 # MM: rather than the three separate functions, you can have one function that takes in a variable numer of arguments using the elipses (...)
 create_all_comb <- function(...){
@@ -209,7 +211,7 @@ nathmda_comb <- nathmda_flags %>%
   mutate(othrace_lowinc=create4comb(othrace_flag,lowinc_flag,owner_flag,purch_flag)) %>%
   mutate(othrace_medinc=create4comb(othrace_flag,medinc_flag,owner_flag,purch_flag)) %>%
   mutate(othrace_highinc=create4comb(othrace_flag,highinc_flag,owner_flag,purch_flag))
-  
+
 
 # MM: what is the purpose of this function? If not being used then you can remove
 createsum <- function(vname,var){
@@ -220,7 +222,9 @@ createsum <- function(vname,var){
 hmda_tract <- nathmda_comb %>%
   group_by(#cenus_tract
            state_code) %>%
-  summarize(apps = sum(app_flag),
+  summarize(total_n = n(),
+            
+            apps = sum(app_flag),
             denials = sum(deny_flag),
             originations =sum(orig_flag),
             purchases = sum(purch_flag),
@@ -299,11 +303,14 @@ hmda_tract <- nathmda_comb %>%
             othrace_vlowinc = sum(othrace_vlowinc),
             othrace_lowinc = sum(othrace_lowinc),
             othrace_medinc = sum(othrace_medinc),
-            othrace_highinc = sum(othrace_highinc)
+            othrace_highinc = sum(othrace_highinc),
             
-            ) %>%
+            missing_borrower_income = sum(is.na(actualincome)),
+            median_borrower_income = median(actualincome, na.rm = TRUE)
+            ) %>% 
+  mutate(total_deny = wht_deny + blk_deny + hisp_deny + api_deny + narace_deny + othrace_deny)
   arrange(#census_tract
-          state_code)
+          state_code) 
 view(hmda_tract)
 
 
