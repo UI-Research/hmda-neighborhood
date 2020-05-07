@@ -18,9 +18,10 @@ setwd("D:/NATDATA/HMDA")
 
 # Read national file and add county code
 #nathmda_in <- read.csv("L:/Libraries/HMDA/Raw/2018_lar.txt",sep="|",nrows=20000)
-nathmda_in <- read.csv("2018_lar.txt",sep="|") %>%
-  filter(state_code=="DC")
+nathmda_in <- read.csv("2018_lar.txt",sep="|")
+
 nathmda_clean <- mutate(nathmda_in, ucounty =str_pad(county_code, 5, pad = "0")) 
+  
 
 # Read income limits file and define max limits for each county
 # MM: Am reading in Section8-FY18.csv using relative file path
@@ -89,14 +90,15 @@ nathmda_flags <-merge(nathmda_geo, il_clean, by.x="ucounty", by.y="ucounty", all
           blk_flag = if_else(hisp_flag==0 & derived_race=='Black or African American',1,0),
           api_flag = if_else(hisp_flag==0 & (derived_race=='Asian' | derived_race=='Native Hawaiian or Other Pacific Islander') ,1,0),
           narace_flag = if_else(derived_race=='Race Not Available',1,0),
-          othrace_flag = if_else(hisp_flag==0 & wht_flag==0 & blk_flag==0 & api_flag==0 & narace_flag==0,1,0)) %>%
+          othrace_flag = if_else(hisp_flag==0 & wht_flag==0 & blk_flag==0 & api_flag==0 & narace_flag==0,1,0)) 
+#%>%
   
-          filter(
+          #filter(
           #Keep only first lein mortgages
-          lein1_flag == 1,
+          #lein1_flag == 1,
           
           #Keep only SF (1-4unit) homes
-          sf_flag ==1)  
+          #sf_flag ==1)  
           
 # MM: rather than the three separate functions, you can have one function that takes in a variable numer of arguments using the elipses (...)
 create_all_comb <- function(...){
@@ -171,10 +173,10 @@ nathmda_comb <- nathmda_flags %>%
   mutate(othrace_purch=create3comb(othrace_flag,owner_flag,purch_flag)) %>%
   
   #Owner-occ purchase loans by income
-  mutate(vlowinc_purch=create3comb(vlowinc_flag,owner_flag,purch_flag)) %>%
-  mutate(lowinc_purch=create3comb(lowinc_flag,owner_flag,purch_flag)) %>%
-  mutate(medinc_purch=create3comb(medinc_flag,owner_flag,purch_flag)) %>%
-  mutate(highinc_purch=create3comb(highinc_flag,owner_flag,purch_flag)) %>%
+  mutate(vlowinc_purch=create3comb(vlowinc_flag,owner_flag,purch_flag, na.rm=TRUE)) %>%
+  mutate(lowinc_purch=create3comb(lowinc_flag,owner_flag,purch_flag, na.rm=TRUE)) %>%
+  mutate(medinc_purch=create3comb(medinc_flag,owner_flag,purch_flag, na.rm=TRUE)) %>%
+  mutate(highinc_purch=create3comb(highinc_flag,owner_flag,purch_flag, na.rm=TRUE)) %>%
 
   #Owner-occ purchase loans to white borrowers by income
   mutate(wht_vlowinc=create4comb(wht_flag,vlowinc_flag,owner_flag,purch_flag)) %>%
@@ -270,10 +272,12 @@ hmda_tract <- nathmda_comb %>%
             narace_purch = sum(narace_purch),
             othrace_purch = sum(othrace_purch),
             
-            vlowinc_purch = sum(vlowinc_purch),
-            lowinc_purch = sum(lowinc_purch),
-            medinc_purch = sum(medinc_purch),
-            highinc_purch = sum(highinc_purch),
+            # MM: ADDING `na.rm = TRUE` removes NAs from the calculation, if there are any NAs in the calculation the result will be 0
+            # MM: You can add them to the rest of the sum summarize statements as well, i noticed that many of the results are NA
+            vlowinc_purch = sum(vlowinc_purch, na.rm = TRUE),
+            lowinc_purch = sum(lowinc_purch, na.rm = TRUE),
+            medinc_purch = sum(medinc_purch, na.rm = TRUE),
+            highinc_purch = sum(highinc_purch, na.rm = TRUE),
             
             wht_vlowinc = sum(wht_vlowinc),
             wht_lowinc = sum(wht_lowinc),
@@ -308,7 +312,6 @@ hmda_tract <- nathmda_comb %>%
             missing_borrower_income = sum(is.na(actualincome)),
             median_borrower_income = median(actualincome, na.rm = TRUE)
             ) %>% 
-  mutate(total_deny = wht_deny + blk_deny + hisp_deny + api_deny + narace_deny + othrace_deny)
   arrange(#census_tract
           state_code) 
 view(hmda_tract)
