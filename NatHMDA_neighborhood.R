@@ -169,12 +169,20 @@ nathmda_flags <-merge(nathmda_geo, il_clean, by.x="ucounty", by.y="ucounty", all
           missing_loan_amount = case_when(is.na(loan_amount)~ 1, TRUE ~ 0)
           
           )
-          
+
+#Check frequencies of new race categories          
 table(nathmda_flags$newrace_app)
 table(nathmda_flags$newrace_coapp)
 table(nathmda_flags$hhrace)
 
-          
+#Cross-tab asian categories with Hispanic flag to see how many Hispanic Asians there are
+table(nathmda_flags$hisp_flag,nathmda_flags$aind_flag)
+table(nathmda_flags$hisp_flag,nathmda_flags$achi_flag)
+table(nathmda_flags$hisp_flag,nathmda_flags$afil_flag)
+table(nathmda_flags$hisp_flag,nathmda_flags$ajap_flag)
+table(nathmda_flags$hisp_flag,nathmda_flags$akor_flag)
+table(nathmda_flags$hisp_flag,nathmda_flags$avie_flag)
+
 
 # This function creats final variables by taking any flag variables that are input
 # and checking that all conditions are equal to one
