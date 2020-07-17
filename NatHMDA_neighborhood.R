@@ -106,7 +106,7 @@ nathmda_flags <-merge(nathmda_geo, il_clean, by.x="ucounty", by.y="ucounty", all
           
           #Calculate Race for each applicant and co-applicant separately
           newrace_app = case_when(applicant_ethnicity_1 == 1 | applicant_ethnicity_1 %in% 11:14 ~ "Hispanic",
-                              !is.na(applicant_race_2) ~ "Mixed",
+                              !is.na(applicant_race_2) ~ "Multiple Races",
                               applicant_race_1 %in% 6:7 ~ "Race Not Available",
                               is.na(applicant_race_1) ~ "Race Not Available",
                               applicant_race_1 == 5 ~ "White",
@@ -118,7 +118,7 @@ nathmda_flags <-merge(nathmda_geo, il_clean, by.x="ucounty", by.y="ucounty", all
           
           newrace_coapp = case_when(co_applicant_ethnicity_1 == 5 | co_applicant_race_1 == 8 ~ "No co-applicant",
                               co_applicant_ethnicity_1 == 1 | co_applicant_ethnicity_1 %in% 11:14 ~ "Hispanic",
-                              !is.na(co_applicant_race_2) ~ "Mixed",
+                              !is.na(co_applicant_race_2) ~ "Multiple Races",
                               co_applicant_race_1 %in% 6:7 ~ "Race Not Available",
                               is.na(co_applicant_race_1) ~ "Race Not Available",
                               co_applicant_race_1 == 5 ~ "White",
