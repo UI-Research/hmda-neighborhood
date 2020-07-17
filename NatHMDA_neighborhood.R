@@ -104,21 +104,58 @@ nathmda_flags <-merge(nathmda_geo, il_clean, by.x="ucounty", by.y="ucounty", all
           #Ethnicity flags
           hisp_flag = if_else(derived_ethnicity=='Hispanic or Latino',1,0),
           
-          #Race flags
-          wht_flag = if_else(hisp_flag==0 & derived_race=='White',1,0),
-          blk_flag = if_else(hisp_flag==0 & derived_race=='Black or African American',1,0),
-          narace_flag = if_else(derived_race=='Race Not Available',1,0),
-          nhpi_flag = if_else(hisp_flag==0 & (derived_race=='Native Hawaiian or Other Pacific Islander'),1,0),
-          ais_flag = if_else(hisp_flag==0 & derived_race=='Asian',1,0),
-          api_flag = if_else(hisp_flag==0 & derived_race %in% c('Native Hawaiian or Other Pacific Islander','Asian'),1,0),
+          #Calculate Race for each applicant and co-applicant separately
+          newrace_app = case_when(applicant_ethnicity_1 == 1 | applicant_ethnicity_1 %in% 11:14 ~ "Hispanic",
+                              !is.na(applicant_race_2) ~ "Mixed",
+                              applicant_race_1 %in% 6:7 ~ "Race Not Available",
+                              is.na(applicant_race_1) ~ "Race Not Available",
+                              applicant_race_1 == 5 ~ "White",
+                              applicant_race_1 == 3 ~ "Black",
+                              applicant_race_1 == 2 | applicant_race_1 %in% 21:27 ~ "Asian",
+                              applicant_race_1 == 4 | applicant_race_1 %in% 41:44 ~ "Native Hawaiian or Other Pacific Islander",
+                              applicant_race_1 == 1 ~ "American Indian or Alaskan Native",
+                              TRUE ~ "NA"),
+          
+          newrace_coapp = case_when(co_applicant_ethnicity_1 == 5 | co_applicant_race_1 == 8 ~ "No co-applicant",
+                              co_applicant_ethnicity_1 == 1 | co_applicant_ethnicity_1 %in% 11:14 ~ "Hispanic",
+                              !is.na(co_applicant_race_2) ~ "Mixed",
+                              co_applicant_race_1 %in% 6:7 ~ "Race Not Available",
+                              is.na(co_applicant_race_1) ~ "Race Not Available",
+                              co_applicant_race_1 == 5 ~ "White",
+                              co_applicant_race_1 == 3 ~ "Black",
+                              co_applicant_race_1 == 2 | co_applicant_race_1 %in% 21:27 ~ "Asian",
+                              co_applicant_race_1 == 4 | co_applicant_race_1 %in% 41:44 ~ "Native Hawaiian or Other Pacific Islander",
+                              co_applicant_race_1 == 1 ~ "American Indian or Alaskan Native",
+                              TRUE ~ "NA"),
+          
+          #If there is a co-applicant and the co-applicant race is different from the applicant race
+          hhmixedrace_flag = if_else(newrace_coapp != "No co-applicant" & newrace_app != "Race Not Available" & newrace_coapp != "Race Not Available" & (newrace_app!=newrace_coapp),1,0),
 
-          #Specific race flags
-          aind_flag = if_else(hisp_flag==0 & derived_race=='Asian' & applicant_race_1 == 21,1,0),
-          achi_flag = if_else(hisp_flag==0 & derived_race=='Asian' & applicant_race_1 == 22,1,0),
-          afil_flag = if_else(hisp_flag==0 & derived_race=='Asian' & applicant_race_1 == 23,1,0),
-          ajap_flag = if_else(hisp_flag==0 & derived_race=='Asian' & applicant_race_1 == 24,1,0),
-          akor_flag = if_else(hisp_flag==0 & derived_race=='Asian' & applicant_race_1 == 25,1,0),
-          avie_flag = if_else(hisp_flag==0 & derived_race=='Asian' & applicant_race_1 == 26,1,0),
+          #Calculate a household race
+          hhrace = case_when(hhmixedrace_flag==1 ~ "Mixed",
+                             newrace_app=="White" ~ "White",
+                             newrace_app=="Black" ~ "Black",
+                             newrace_app=="Asian" ~ "Asian",
+                             newrace_app=="Native Hawaiian or Other Pacific Islander" ~ "Native Hawaiian or Other Pacific Islander",
+                             newrace_app=="American Indian or Alaskan Native" ~ "American Indian or Alaskan Native",
+                             newrace_app=="Race Not Available" ~ "Race Not Available",
+                             TRUE ~ "NA"),
+          
+          
+          wht_flag = if_else(hhrace=='White',1,0),
+          blk_flag = if_else(hhrace=='Black or African American',1,0),
+          narace_flag = if_else(hhrace=='Race Not Available',1,0),
+          nhpi_flag = if_else(hhrace=='Native Hawaiian or Other Pacific Islander',1,0),
+          ais_flag = if_else(hhrace=='Asian',1,0),
+          api_flag = if_else(hhrace %in% c('Native Hawaiian or Other Pacific Islander','Asian'),1,0),
+
+          #Specific Asian race flags (NOT filtered by Hispanic)
+          aind_flag = if_else(applicant_race_1 == 21,1,0),
+          achi_flag = if_else(applicant_race_1 == 22,1,0),
+          afil_flag = if_else(applicant_race_1 == 23,1,0),
+          ajap_flag = if_else(applicant_race_1 == 24,1,0),
+          akor_flag = if_else(applicant_race_1 == 25,1,0),
+          avie_flag = if_else(applicant_race_1 == 26,1,0),
           
           #Other race flag
           othrace_flag = if_else(hisp_flag==0 & wht_flag==0 & blk_flag==0 & ais_flag==0 & nhpi_flag ==0 & narace_flag==0,1,0), 
@@ -133,8 +170,12 @@ nathmda_flags <-merge(nathmda_geo, il_clean, by.x="ucounty", by.y="ucounty", all
           
           )
           
+table(nathmda_flags$newrace_app)
+table(nathmda_flags$newrace_coapp)
+table(nathmda_flags$hhrace)
 
           
+
 # This function creats final variables by taking any flag variables that are input
 # and checking that all conditions are equal to one
 create_var <- function(...){
