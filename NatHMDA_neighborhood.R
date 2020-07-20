@@ -133,6 +133,8 @@ nathmda_flags <-merge(nathmda_geo, il_clean, by.x="ucounty", by.y="ucounty", all
 
           #Calculate a household race
           hhrace = case_when(hhmixedrace_flag==1 ~ "Mixed",
+                             newrace_app=="Hispanic" ~ "Hispanic",
+                             newrace_app=="Multiple Races" ~ "Multiple Races",
                              newrace_app=="White" ~ "White",
                              newrace_app=="Black" ~ "Black",
                              newrace_app=="Asian" ~ "Asian",
@@ -144,10 +146,13 @@ nathmda_flags <-merge(nathmda_geo, il_clean, by.x="ucounty", by.y="ucounty", all
           
           wht_flag = if_else(hhrace=='White',1,0),
           blk_flag = if_else(hhrace=='Black or African American',1,0),
-          narace_flag = if_else(hhrace=='Race Not Available',1,0),
+          his_flag = if_else(hhrace=='Hispanic',1,0),
           nhpi_flag = if_else(hhrace=='Native Hawaiian or Other Pacific Islander',1,0),
           ais_flag = if_else(hhrace=='Asian',1,0),
           api_flag = if_else(hhrace %in% c('Native Hawaiian or Other Pacific Islander','Asian'),1,0),
+          mrace_flag = if_else(hhrace=='Multiple Races',1,0),
+          mixed_flag = if_else(hhrace=='Mixed',1,0),
+          narace_flag = if_else(hhrace=='Race Not Available',1,0),
 
           #Specific Asian race flags (NOT filtered by Hispanic)
           aind_flag = if_else(applicant_race_1 == 21,1,0),
@@ -205,135 +210,135 @@ nathmda_comb <- nathmda_flags %>%
   mutate(deny_sf=create_var(conv_flag,prop1_4_flag,deny_flag)) %>%
   
   #Denials by race 
-  mutate(wht_deny=create_var(wht_flag,prop1_4_flag,deny_flag)) %>% 
-  mutate(blk_deny=create_var(blk_flag,prop1_4_flag,deny_flag)) %>%
-  mutate(hisp_deny=create_var(hisp_flag,prop1_4_flag,deny_flag)) %>%
-  mutate(api_deny=create_var(api_flag,prop1_4_flag,deny_flag)) %>%
-  mutate(ais_deny=create_var(ais_flag,prop1_4_flag,deny_flag)) %>%
-  mutate(nhpi_deny=create_var(nhpi_flag,prop1_4_flag,deny_flag)) %>%
-  mutate(narace_deny=create_var(narace_flag,prop1_4_flag,deny_flag)) %>%
-  mutate(othrace_deny=create_var(othrace_flag,prop1_4_flag,deny_flag)) %>%
+  #mutate(wht_deny=create_var(wht_flag,prop1_4_flag,deny_flag)) %>% 
+  #mutate(blk_deny=create_var(blk_flag,prop1_4_flag,deny_flag)) %>%
+  #mutate(hisp_deny=create_var(hisp_flag,prop1_4_flag,deny_flag)) %>%
+  #mutate(api_deny=create_var(api_flag,prop1_4_flag,deny_flag)) %>%
+  #mutate(ais_deny=create_var(ais_flag,prop1_4_flag,deny_flag)) %>%
+  #mutate(nhpi_deny=create_var(nhpi_flag,prop1_4_flag,deny_flag)) %>%
+  #mutate(narace_deny=create_var(narace_flag,prop1_4_flag,deny_flag)) %>%
+  #mutate(othrace_deny=create_var(othrace_flag,prop1_4_flag,deny_flag)) %>%
   
   #Denials by specific race 
-  mutate(aind_deny=create_var(aind_flag,prop1_4_flag,deny_flag)) %>% 
-  mutate(achi_deny=create_var(achi_flag,prop1_4_flag,deny_flag)) %>% 
-  mutate(afil_deny=create_var(afil_flag,prop1_4_flag,deny_flag)) %>% 
-  mutate(ajap_deny=create_var(ajap_flag,prop1_4_flag,deny_flag)) %>% 
-  mutate(akor_deny=create_var(akor_flag,prop1_4_flag,deny_flag)) %>% 
-  mutate(avie_deny=create_var(avie_flag,prop1_4_flag,deny_flag)) %>% 
+  #mutate(aind_deny=create_var(aind_flag,prop1_4_flag,deny_flag)) %>% 
+  #mutate(achi_deny=create_var(achi_flag,prop1_4_flag,deny_flag)) %>% 
+  #mutate(afil_deny=create_var(afil_flag,prop1_4_flag,deny_flag)) %>% 
+  #mutate(ajap_deny=create_var(ajap_flag,prop1_4_flag,deny_flag)) %>% 
+  #mutate(akor_deny=create_var(akor_flag,prop1_4_flag,deny_flag)) %>% 
+  #mutate(avie_deny=create_var(avie_flag,prop1_4_flag,deny_flag)) %>% 
   
   #Denials by income
-  mutate(vlowinc_deny=create_var(vlowinc_flag,prop1_4_flag,deny_flag)) %>%
-  mutate(lowinc_deny=create_var(lowinc_flag,prop1_4_flag,deny_flag)) %>%
-  mutate(medinc_deny=create_var(medinc_flag,prop1_4_flag,deny_flag)) %>%
-  mutate(highinc_deny=create_var(highinc_flag,prop1_4_flag,deny_flag)) %>%
-  mutate(missinginc_deny=create_var(missing_income,prop1_4_flag,deny_flag)) %>%
+  #mutate(vlowinc_deny=create_var(vlowinc_flag,prop1_4_flag,deny_flag)) %>%
+  #mutate(lowinc_deny=create_var(lowinc_flag,prop1_4_flag,deny_flag)) %>%
+  #mutate(medinc_deny=create_var(medinc_flag,prop1_4_flag,deny_flag)) %>%
+  #mutate(highinc_deny=create_var(highinc_flag,prop1_4_flag,deny_flag)) %>%
+  #mutate(missinginc_deny=create_var(missing_income,prop1_4_flag,deny_flag)) %>%
   
   #Refis by race 
-  mutate(wht_refi=create_var(wht_flag,conv_flag,refi_flag)) %>% 
-  mutate(blk_refi=create_var(blk_flag,conv_flag,refi_flag)) %>%
-  mutate(hisp_refi=create_var(hisp_flag,conv_flag,refi_flag)) %>%
-  mutate(api_refi=create_var(api_flag,conv_flag,refi_flag)) %>%
-  mutate(ais_refi=create_var(ais_flag,conv_flag,refi_flag)) %>%
-  mutate(nhpi_refi=create_var(nhpi_flag,conv_flag,refi_flag)) %>%
-  mutate(narace_refi=create_var(narace_flag,conv_flag,refi_flag)) %>%
-  mutate(othrace_refi=create_var(othrace_flag,conv_flag,refi_flag)) %>%
+  #mutate(wht_refi=create_var(wht_flag,conv_flag,refi_flag)) %>% 
+  #mutate(blk_refi=create_var(blk_flag,conv_flag,refi_flag)) %>%
+  #mutate(hisp_refi=create_var(hisp_flag,conv_flag,refi_flag)) %>%
+  #mutate(api_refi=create_var(api_flag,conv_flag,refi_flag)) %>%
+  #mutate(ais_refi=create_var(ais_flag,conv_flag,refi_flag)) %>%
+  #mutate(nhpi_refi=create_var(nhpi_flag,conv_flag,refi_flag)) %>%
+  #mutate(narace_refi=create_var(narace_flag,conv_flag,refi_flag)) %>%
+  #mutate(othrace_refi=create_var(othrace_flag,conv_flag,refi_flag)) %>%
   
   #Refis by specific race 
-  mutate(aind_refi=create_var(aind_flag,conv_flag,refi_flag)) %>% 
-  mutate(achi_refi=create_var(achi_flag,conv_flag,refi_flag)) %>% 
-  mutate(afil_refi=create_var(afil_flag,conv_flag,refi_flag)) %>% 
-  mutate(ajap_refi=create_var(ajap_flag,conv_flag,refi_flag)) %>% 
-  mutate(akor_refi=create_var(akor_flag,conv_flag,refi_flag)) %>% 
-  mutate(avie_refi=create_var(avie_flag,conv_flag,refi_flag)) %>% 
+  #mutate(aind_refi=create_var(aind_flag,conv_flag,refi_flag)) %>% 
+  #mutate(achi_refi=create_var(achi_flag,conv_flag,refi_flag)) %>% 
+  #mutate(afil_refi=create_var(afil_flag,conv_flag,refi_flag)) %>% 
+  #mutate(ajap_refi=create_var(ajap_flag,conv_flag,refi_flag)) %>% 
+  #mutate(akor_refi=create_var(akor_flag,conv_flag,refi_flag)) %>% 
+  #mutate(avie_refi=create_var(avie_flag,conv_flag,refi_flag)) %>% 
   
   #Refis by income
-  mutate(vlowinc_refi=create_var(vlowinc_flag,conv_flag,refi_flag)) %>%
-  mutate(lowinc_refi=create_var(lowinc_flag,conv_flag,refi_flag)) %>%
-  mutate(medinc_refi=create_var(medinc_flag,conv_flag,refi_flag)) %>%
-  mutate(highinc_refi=create_var(highinc_flag,conv_flag,refi_flag)) %>%
-  mutate(missinginc_refi=create_var(missing_income,conv_flag,refi_flag)) %>%
+  #mutate(vlowinc_refi=create_var(vlowinc_flag,conv_flag,refi_flag)) %>%
+  #mutate(lowinc_refi=create_var(lowinc_flag,conv_flag,refi_flag)) %>%
+  #mutate(medinc_refi=create_var(medinc_flag,conv_flag,refi_flag)) %>%
+  #mutate(highinc_refi=create_var(highinc_flag,conv_flag,refi_flag)) %>%
+  #mutate(missinginc_refi=create_var(missing_income,conv_flag,refi_flag)) %>%
   
   #Owner-occ purchase loans by race
-  mutate(wht_purch=create_var(wht_flag,owner_flag,purch_flag,conv_flag)) %>%
-  mutate(blk_purch=create_var(blk_flag,owner_flag,purch_flag,conv_flag)) %>%
-  mutate(hisp_purch=create_var(hisp_flag,owner_flag,purch_flag,conv_flag)) %>%
-  mutate(api_purch=create_var(api_flag,owner_flag,purch_flag,conv_flag)) %>%
-  mutate(ais_purch=create_var(ais_flag,owner_flag,purch_flag,conv_flag)) %>%
-  mutate(nhpi_purch=create_var(nhpi_flag,owner_flag,purch_flag,conv_flag)) %>%
-  mutate(narace_purch=create_var(narace_flag,owner_flag,purch_flag,conv_flag)) %>%
-  mutate(othrace_purch=create_var(othrace_flag,owner_flag,purch_flag,conv_flag)) %>%
+  mutate(wht_purch=create_var(wht_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>%
+  mutate(blk_purch=create_var(blk_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>%
+  mutate(hisp_purch=create_var(hisp_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>%
+  mutate(api_purch=create_var(api_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>%
+  mutate(ais_purch=create_var(ais_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>%
+  mutate(nhpi_purch=create_var(nhpi_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>%
+  mutate(narace_purch=create_var(narace_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>%
+  mutate(othrace_purch=create_var(othrace_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>%
   
   #Owner-occ purchase loans by specific race 
-  mutate(aind_purch=create_var(aind_flag,owner_flag,purch_flag,conv_flag)) %>% 
-  mutate(achi_purch=create_var(achi_flag,owner_flag,purch_flag,conv_flag)) %>% 
-  mutate(afil_purch=create_var(afil_flag,owner_flag,purch_flag,conv_flag)) %>% 
-  mutate(ajap_purch=create_var(ajap_flag,owner_flag,purch_flag,conv_flag)) %>% 
-  mutate(akor_purch=create_var(akor_flag,owner_flag,purch_flag,conv_flag)) %>% 
-  mutate(avie_purch=create_var(avie_flag,owner_flag,purch_flag,conv_flag)) %>% 
+  mutate(aind_purch=create_var(aind_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>% 
+  mutate(achi_purch=create_var(achi_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>% 
+  mutate(afil_purch=create_var(afil_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>% 
+  mutate(ajap_purch=create_var(ajap_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>% 
+  mutate(akor_purch=create_var(akor_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>% 
+  mutate(avie_purch=create_var(avie_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>% 
   
   #Owner-occ purchase loans by income
-  mutate(vlowinc_purch=create_var(vlowinc_flag,owner_flag,purch_flag,conv_flag)) %>%
-  mutate(lowinc_purch=create_var(lowinc_flag,owner_flag,purch_flag,conv_flag)) %>%
-  mutate(medinc_purch=create_var(medinc_flag,owner_flag,purch_flag,conv_flag)) %>%
-  mutate(highinc_purch=create_var(highinc_flag,owner_flag,purch_flag,conv_flag)) %>%
-  mutate(missinginc_purch=create_var(missing_income,owner_flag,purch_flag,conv_flag)) %>%
+  mutate(vlowinc_purch=create_var(vlowinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>%
+  mutate(lowinc_purch=create_var(lowinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>%
+  mutate(medinc_purch=create_var(medinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>%
+  mutate(highinc_purch=create_var(highinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>%
+  mutate(missinginc_purch=create_var(missing_income,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>%
 
   #Owner-occ purchase loans to white borrowers by income
-  mutate(wht_vlowinc=create_var(wht_flag,vlowinc_flag,owner_flag,purch_flag,conv_flag)) %>%
-  mutate(wht_lowinc=create_var(wht_flag,lowinc_flag,owner_flag,purch_flag,conv_flag)) %>%
-  mutate(wht_medinc=create_var(wht_flag,medinc_flag,owner_flag,purch_flag,conv_flag)) %>%
-  mutate(wht_highinc=create_var(wht_flag,highinc_flag,owner_flag,purch_flag,conv_flag)) %>%
+  mutate(wht_vlowinc=create_var(wht_flag,vlowinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>%
+  mutate(wht_lowinc=create_var(wht_flag,lowinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>%
+  mutate(wht_medinc=create_var(wht_flag,medinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>%
+  mutate(wht_highinc=create_var(wht_flag,highinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>%
   
   #Owner-occ purchase loans to black borrowers by income
-  mutate(blk_vlowinc=create_var(blk_flag,vlowinc_flag,owner_flag,purch_flag,conv_flag)) %>%
-  mutate(blk_lowinc=create_var(blk_flag,lowinc_flag,owner_flag,purch_flag,conv_flag)) %>%
-  mutate(blk_medinc=create_var(blk_flag,medinc_flag,owner_flag,purch_flag,conv_flag)) %>%
-  mutate(blk_highinc=create_var(blk_flag,highinc_flag,owner_flag,purch_flag,conv_flag)) %>%
+  mutate(blk_vlowinc=create_var(blk_flag,vlowinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>%
+  mutate(blk_lowinc=create_var(blk_flag,lowinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>%
+  mutate(blk_medinc=create_var(blk_flag,medinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>%
+  mutate(blk_highinc=create_var(blk_flag,highinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>%
   
   #Owner-occ purchase loans to Hispanic borrowers by income
-  mutate(hisp_vlowinc=create_var(hisp_flag,vlowinc_flag,owner_flag,purch_flag,conv_flag)) %>%
-  mutate(hisp_lowinc=create_var(hisp_flag,lowinc_flag,owner_flag,purch_flag,conv_flag)) %>%
-  mutate(hisp_medinc=create_var(hisp_flag,medinc_flag,owner_flag,purch_flag,conv_flag)) %>%
-  mutate(hisp_highinc=create_var(hisp_flag,highinc_flag,owner_flag,purch_flag,conv_flag)) %>%
+  mutate(hisp_vlowinc=create_var(hisp_flag,vlowinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>%
+  mutate(hisp_lowinc=create_var(hisp_flag,lowinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>%
+  mutate(hisp_medinc=create_var(hisp_flag,medinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>%
+  mutate(hisp_highinc=create_var(hisp_flag,highinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>%
   
   #Owner-occ purchase loans to API borrowers by income
-  mutate(api_vlowinc=create_var(api_flag,vlowinc_flag,owner_flag,purch_flag,conv_flag)) %>%
-  mutate(api_lowinc=create_var(api_flag,lowinc_flag,owner_flag,purch_flag,conv_flag)) %>%
-  mutate(api_medinc=create_var(api_flag,medinc_flag,owner_flag,purch_flag,conv_flag)) %>%
-  mutate(api_highinc=create_var(api_flag,highinc_flag,owner_flag,purch_flag,conv_flag)) %>%
+  mutate(api_vlowinc=create_var(api_flag,vlowinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>%
+  mutate(api_lowinc=create_var(api_flag,lowinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>%
+  mutate(api_medinc=create_var(api_flag,medinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>%
+  mutate(api_highinc=create_var(api_flag,highinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>%
   
   #Owner-occ purchase loans to missing race borrowers by income
-  mutate(narace_vlowinc=create_var(narace_flag,vlowinc_flag,owner_flag,purch_flag,conv_flag)) %>%
-  mutate(narace_lowinc=create_var(narace_flag,lowinc_flag,owner_flag,purch_flag,conv_flag)) %>%
-  mutate(narace_medinc=create_var(narace_flag,medinc_flag,owner_flag,purch_flag,conv_flag)) %>%
-  mutate(narace_highinc=create_var(narace_flag,highinc_flag,owner_flag,purch_flag,conv_flag)) %>%
+  mutate(narace_vlowinc=create_var(narace_flag,vlowinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>%
+  mutate(narace_lowinc=create_var(narace_flag,lowinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>%
+  mutate(narace_medinc=create_var(narace_flag,medinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>%
+  mutate(narace_highinc=create_var(narace_flag,highinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>%
   
   #Owner-occ purchase loans to other race borrowers by income
-  mutate(othrace_vlowinc=create_var(othrace_flag,vlowinc_flag,owner_flag,purch_flag,conv_flag)) %>%
-  mutate(othrace_lowinc=create_var(othrace_flag,lowinc_flag,owner_flag,purch_flag,conv_flag)) %>%
-  mutate(othrace_medinc=create_var(othrace_flag,medinc_flag,owner_flag,purch_flag,conv_flag)) %>%
-  mutate(othrace_highinc=create_var(othrace_flag,highinc_flag,owner_flag,purch_flag,conv_flag))%>%
+  mutate(othrace_vlowinc=create_var(othrace_flag,vlowinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>%
+  mutate(othrace_lowinc=create_var(othrace_flag,lowinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>%
+  mutate(othrace_medinc=create_var(othrace_flag,medinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>%
+  mutate(othrace_highinc=create_var(othrace_flag,highinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag))%>%
   
   #Owner-occ purchase loans by gender 
-  mutate(man_purch=create_var(male_flag,owner_flag,purch_flag,conv_flag)) %>%
-  mutate(wom_purch=create_var(female_flag,owner_flag,purch_flag,conv_flag)) %>%
-  mutate(nasex_purch=create_var(nasex_flag,owner_flag,purch_flag,conv_flag)) %>%
+  mutate(man_purch=create_var(male_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>%
+  mutate(wom_purch=create_var(female_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>%
+  mutate(nasex_purch=create_var(nasex_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>%
   
   #Owner-occ purchase loans to male borrowers by income
-  mutate(man_vlowinc=create_var(male_flag,vlowinc_flag,owner_flag,purch_flag,conv_flag)) %>%
-  mutate(man_lowinc=create_var(male_flag,lowinc_flag,owner_flag,purch_flag,conv_flag)) %>%
-  mutate(man_medinc=create_var(male_flag,medinc_flag,owner_flag,purch_flag,conv_flag)) %>%
-  mutate(man_highinc=create_var(male_flag,highinc_flag,owner_flag,purch_flag,conv_flag))%>%
+  mutate(man_vlowinc=create_var(male_flag,vlowinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>%
+  mutate(man_lowinc=create_var(male_flag,lowinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>%
+  mutate(man_medinc=create_var(male_flag,medinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>%
+  mutate(man_highinc=create_var(male_flag,highinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag))%>%
   
   #Owner-occ purchase loans to female borrowers by income
-  mutate(wom_vlowinc=create_var(female_flag,vlowinc_flag,owner_flag,purch_flag,conv_flag)) %>%
-  mutate(wom_lowinc=create_var(female_flag,lowinc_flag,owner_flag,purch_flag,conv_flag)) %>%
-  mutate(wom_medinc=create_var(female_flag,medinc_flag,owner_flag,purch_flag,conv_flag)) %>%
-  mutate(wom_highinc=create_var(female_flag,highinc_flag,owner_flag,purch_flag,conv_flag))%>%
+  mutate(wom_vlowinc=create_var(female_flag,vlowinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>%
+  mutate(wom_lowinc=create_var(female_flag,lowinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>%
+  mutate(wom_medinc=create_var(female_flag,medinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag)) %>%
+  mutate(wom_highinc=create_var(female_flag,highinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag))%>%
 
   #Median borrower income
-  mutate(medincome = if_else(owner_flag ==1 & purch_flag ==1,actualincome,NaN))
+  mutate(medincome = if_else(owner_flag ==1 & purch_flag ==1 & lein1_flag ==1  & prop1_4_flag ==1,actualincome,NaN))
 
 
 #Final summarize by tract (state for testing)
