@@ -72,6 +72,7 @@ nathmda_flags <-merge(nathmda_geo, il_clean, by.x="ucounty", by.y="ucounty", all
           lowinc_flag = if_else(actualincome<=lowmax & actualincome>vlowmax,1,0),
           medinc_flag = if_else(actualincome<=medmax & actualincome>lowmax,1,0),
           highinc_flag = if_else(medmax<=actualincome,1,0),
+          income_avail = if_else(missing_income !=1,1,0),
           
           #Loan type flags
           conv_flag = if_else(loan_type==1,1,0),
@@ -100,9 +101,6 @@ nathmda_flags <-merge(nathmda_geo, il_clean, by.x="ucounty", by.y="ucounty", all
           owner_flag = if_else(occupancy_type==1,1,0),
           secondary_flag = if_else(occupancy_type==2,1,0),
           investor_flag = if_else(occupancy_type==3,1,0),
-          
-          #Ethnicity flags
-          hisp_flag = if_else(derived_ethnicity=='Hispanic or Latino',1,0),
           
           #Calculate Race for each applicant and co-applicant separately
           newrace_app = case_when(applicant_ethnicity_1 == 1 | applicant_ethnicity_1 %in% 11:14 ~ "Hispanic",
@@ -143,10 +141,11 @@ nathmda_flags <-merge(nathmda_geo, il_clean, by.x="ucounty", by.y="ucounty", all
                              newrace_app=="Race Not Available" ~ "Race Not Available",
                              TRUE ~ "NA"),
           
+          race_avail = if_else(hhrace!='Race Not Available' | hhrace!='NA',1,0),
           
           wht_flag = if_else(hhrace=='White',1,0),
-          blk_flag = if_else(hhrace=='Black or African American',1,0),
-          his_flag = if_else(hhrace=='Hispanic',1,0),
+          blk_flag = if_else(hhrace=='Black',1,0),
+          hisp_flag = if_else(hhrace=='Hispanic',1,0),
           nhpi_flag = if_else(hhrace=='Native Hawaiian or Other Pacific Islander',1,0),
           ais_flag = if_else(hhrace=='Asian',1,0),
           api_flag = if_else(hhrace %in% c('Native Hawaiian or Other Pacific Islander','Asian'),1,0),
@@ -169,6 +168,7 @@ nathmda_flags <-merge(nathmda_geo, il_clean, by.x="ucounty", by.y="ucounty", all
           male_flag = if_else(derived_sex=='Male',1,0),
           female_flag = if_else(derived_sex=='Female',1,0),
           nasex_flag = if_else(derived_sex=='Sex Not Available',1,0),
+          sex_avail = if_else(nasex_flag != 1,1,0),
           
           #Loan amount flag
           missing_loan_amount = case_when(is.na(loan_amount)~ 1, TRUE ~ 0)
@@ -208,6 +208,12 @@ nathmda_comb <- nathmda_flags %>%
   mutate(conv_purch=create_var(conv_flag,purch_flag)) %>%
   mutate(conv_refi=create_var(conv_flag,refi_flag)) %>%
   mutate(deny_sf=create_var(conv_flag,prop1_4_flag,deny_flag)) %>%
+  
+  #Denominators
+  mutate(income_avail=create_var(income_avail)) %>%
+  mutate(race_avail=create_var(race_avail)) %>%
+  mutate(sex_avail=create_var(sex_avail)) %>%
+  mutate(race_income_avail=create_var(race_avail,income_avail)) %>%
   
   #Denials by race 
   #mutate(wht_deny=create_var(wht_flag,prop1_4_flag,deny_flag)) %>% 
@@ -360,58 +366,54 @@ hmda_tract <- nathmda_comb %>%
             purchases = sum(purch_flag, na.rm = TRUE),
             refis = sum(refi_flag, na.rm = TRUE),
             
-            wht_deny = sum(wht_deny, na.rm = TRUE),
-            blk_deny = sum(blk_deny, na.rm = TRUE),
-            hisp_deny = sum(hisp_deny, na.rm = TRUE),
-            api_deny = sum(api_deny, na.rm = TRUE),
-            ais_deny = sum(ais_deny, na.rm = TRUE),
-            nhpi_deny = sum(nhpi_deny, na.rm = TRUE),
-            narace_deny = sum(narace_deny, na.rm = TRUE),
-            othrace_deny = sum(othrace_deny, na.rm = TRUE),
+            income_avail = sum(income_avail, na.rm = TRUE),
+            race_avail = sum(race_avail, na.rm = TRUE), 
+            sex_avail = sum(sex_avail, na.rm = TRUE),
+            race_income_avail = sum(race_income_avail, na.rm = TRUE),
             
-            aind_deny = sum(aind_deny, na.rm = TRUE),
-            achi_deny = sum(achi_deny, na.rm = TRUE),
-            afil_deny = sum(afil_deny, na.rm = TRUE),
-            ajap_deny = sum(ajap_deny, na.rm = TRUE),
-            akor_deny = sum(akor_deny, na.rm = TRUE),
-            avie_deny = sum(avie_deny, na.rm = TRUE),
+            #wht_deny = sum(wht_deny, na.rm = TRUE),
+            #blk_deny = sum(blk_deny, na.rm = TRUE),
+            #hisp_deny = sum(hisp_deny, na.rm = TRUE),
+            #api_deny = sum(api_deny, na.rm = TRUE),
+            #ais_deny = sum(ais_deny, na.rm = TRUE),
+            #nhpi_deny = sum(nhpi_deny, na.rm = TRUE),
+            #narace_deny = sum(narace_deny, na.rm = TRUE),
+            #othrace_deny = sum(othrace_deny, na.rm = TRUE),
             
-            vlowinc_deny = sum(vlowinc_deny, na.rm = TRUE),
-            lowinc_deny = sum(lowinc_deny, na.rm = TRUE),
-            medinc_deny = sum(medinc_deny, na.rm = TRUE),
-            highinc_deny = sum(highinc_deny, na.rm = TRUE),
-            missinginc_deny = sum(missinginc_deny, na.rm = TRUE),
+            #aind_deny = sum(aind_deny, na.rm = TRUE),
+            #achi_deny = sum(achi_deny, na.rm = TRUE),
+            #afil_deny = sum(afil_deny, na.rm = TRUE),
+            #ajap_deny = sum(ajap_deny, na.rm = TRUE),
+            #akor_deny = sum(akor_deny, na.rm = TRUE),
+            #avie_deny = sum(avie_deny, na.rm = TRUE),
             
-            wht_refi = sum(wht_refi, na.rm = TRUE),
-            blk_refi = sum(blk_refi, na.rm = TRUE),
-            hisp_refi = sum(hisp_refi, na.rm = TRUE),
-            api_refi = sum(api_refi, na.rm = TRUE),
-            ais_refi = sum(ais_refi, na.rm = TRUE),
-            nhpi_refi = sum(nhpi_refi, na.rm = TRUE),
-            narace_refi = sum(narace_refi, na.rm = TRUE),
-            othrace_refi = sum(othrace_refi, na.rm = TRUE),
+            #vlowinc_deny = sum(vlowinc_deny, na.rm = TRUE),
+            #lowinc_deny = sum(lowinc_deny, na.rm = TRUE),
+            #medinc_deny = sum(medinc_deny, na.rm = TRUE),
+            #highinc_deny = sum(highinc_deny, na.rm = TRUE),
+            #missinginc_deny = sum(missinginc_deny, na.rm = TRUE),
             
-            aind_refi = sum(aind_refi, na.rm = TRUE),
-            achi_refi = sum(achi_refi, na.rm = TRUE),
-            afil_refi = sum(afil_refi, na.rm = TRUE),
-            ajap_refi = sum(ajap_refi, na.rm = TRUE),
-            akor_refi = sum(akor_refi, na.rm = TRUE),
-            avie_refi = sum(avie_refi, na.rm = TRUE),
+            #wht_refi = sum(wht_refi, na.rm = TRUE),
+            #blk_refi = sum(blk_refi, na.rm = TRUE),
+            #hisp_refi = sum(hisp_refi, na.rm = TRUE),
+            #api_refi = sum(api_refi, na.rm = TRUE),
+            #ais_refi = sum(ais_refi, na.rm = TRUE),
+            #nhpi_refi = sum(nhpi_refi, na.rm = TRUE),
+            #narace_refi = sum(narace_refi, na.rm = TRUE),
+            #othrace_refi = sum(othrace_refi, na.rm = TRUE),
             
-            vlowinc_refi = sum(vlowinc_refi, na.rm = TRUE),
-            lowinc_refi = sum(lowinc_refi, na.rm = TRUE),
-            medinc_refi = sum(medinc_refi, na.rm = TRUE),
-            highinc_refi = sum(highinc_refi, na.rm = TRUE),
-            missinginc_refi = sum(missinginc_refi, na.rm = TRUE),
+            #aind_refi = sum(aind_refi, na.rm = TRUE),
+            #achi_refi = sum(achi_refi, na.rm = TRUE),
+            #afil_refi = sum(afil_refi, na.rm = TRUE),
+            #ajap_refi = sum(ajap_refi, na.rm = TRUE),
+            #akor_refi = sum(akor_refi, na.rm = TRUE),
+            #avie_refi = sum(avie_refi, na.rm = TRUE),
             
-            wht_deny = sum(wht_deny, na.rm = TRUE),
-            blk_deny = sum(blk_deny, na.rm = TRUE),
-            hisp_deny = sum(hisp_deny, na.rm = TRUE),
-            api_deny = sum(api_deny, na.rm = TRUE),
-            ais_deny = sum(ais_deny, na.rm = TRUE),
-            nhpi_deny = sum(nhpi_deny, na.rm = TRUE),
-            narace_deny = sum(narace_deny, na.rm = TRUE),
-            othrace_deny = sum(othrace_deny, na.rm = TRUE),
+            #vlowinc_refi = sum(vlowinc_refi, na.rm = TRUE),
+            #lowinc_refi = sum(lowinc_refi, na.rm = TRUE),
+            #medinc_refi = sum(medinc_refi, na.rm = TRUE),
+            #highinc_refi = sum(highinc_refi, na.rm = TRUE),
+            #missinginc_refi = sum(missinginc_refi, na.rm = TRUE),
             
             wht_purch = sum(wht_purch, na.rm = TRUE),
             blk_purch = sum(blk_purch, na.rm = TRUE),
