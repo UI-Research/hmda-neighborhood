@@ -16,18 +16,17 @@ setwd("D:/NATDATA/hmda-neighborhood")
 
 # Read national file and add county code
 ### MM Code Review 8-14: Changed  function read.csv to read_delim, as requested by Rob
-#nathmda_in <- read_delim("L:/Libraries/HMDA/Raw/2018_lar.txt",delim="|")
-nathmda_in <- read_delim("2018_lar.txt",delim="|")
+nathmda_in <- read_delim("L:/Libraries/HMDA/Raw/2018_lar.txt",delim="|")
+#nathmda_in <- read_delim("2018_lar.txt",delim="|")
 
 nathmda_clean <- mutate(nathmda_in, ucounty =str_pad(county_code, 5, pad = "0")) %>%
                         filter(state_code %in% c("DC")) 
   
 
 # Read income limits file and define max limits for each county
-# il_in <- read_csv("D:/NATDATA/hmda-neighborhood/Income Limits/Section8-FY18.csv")
-### MM Code Review 8-14: Changed function read.csv to read_delim
-il_in <- read_csv("Income Limits/Section8-FY18.csv") 
-# MM: rather than using mutate to create new columns for vlowmax and lowmax, you can rename the old columns using dplyr function 'rename' https://dplyr.tidyverse.org/reference/select.html
+### MM Code Review 8-14: Changed function read.csv to read_csv, as requested by Rob
+il_in <- read_csv("D:/NATDATA/hmda-neighborhood/Income Limits/Section8-FY18.csv")
+#il_in <- read_csv("Income Limits/Section8-FY18.csv") 
 il_clean <- mutate(il_in, st_in =str_pad(State, 2, pad = "0"),
                    cnt_in =str_pad(County, 3, pad = "0"),
                    ucounty = paste0(st_in, cnt_in),
