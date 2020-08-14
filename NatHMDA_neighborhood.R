@@ -11,22 +11,22 @@
 library(tidyverse)
 
 # Set working directory
-# MM: If you open an R project from RStudio (File -> Open Project...) you can use relative file paths within the project and dont need to set working directory
+### MM Code Review 8-14: If you open an R project from RStudio (File -> Open Project...) you can use relative file paths within the project and dont need to set working directory
 setwd("D:/NATDATA/hmda-neighborhood")
 
-
 # Read national file and add county code
-nathmda_in <- read.csv("L:/Libraries/HMDA/Raw/2018_lar.txt",sep="|")
-#nathmda_in <- read.csv("2018_lar.txt",sep="|")
+### MM Code Review 8-14: Changed  function read.csv to read_delim, as requested by Rob
+#nathmda_in <- read_delim("L:/Libraries/HMDA/Raw/2018_lar.txt",delim="|")
+nathmda_in <- read_delim("2018_lar.txt",delim="|")
 
 nathmda_clean <- mutate(nathmda_in, ucounty =str_pad(county_code, 5, pad = "0")) %>%
                         filter(state_code %in% c("DC")) 
   
 
 # Read income limits file and define max limits for each county
-# MM: Am reading in Section8-FY18.csv using relative file path
-# il_in <- read.csv("D:/NATDATA/hmda-neighborhood/Income Limits/Section8-FY18.csv")
-il_in <- read.csv("Income Limits/Section8-FY18.csv") 
+# il_in <- read_csv("D:/NATDATA/hmda-neighborhood/Income Limits/Section8-FY18.csv")
+### MM Code Review 8-14: Changed function read.csv to read_delim
+il_in <- read_csv("Income Limits/Section8-FY18.csv") 
 # MM: rather than using mutate to create new columns for vlowmax and lowmax, you can rename the old columns using dplyr function 'rename' https://dplyr.tidyverse.org/reference/select.html
 il_clean <- mutate(il_in, st_in =str_pad(State, 2, pad = "0"),
                    cnt_in =str_pad(County, 3, pad = "0"),
@@ -348,6 +348,8 @@ nathmda_comb <- nathmda_flags %>%
 
 
 #Final summarize by tract (state for testing)
+### MM Code Review 8-14: You can consider using the functions summarize and across to reduce the
+# lines of code it takes to calculate these sums and medians: https://dplyr.tidyverse.org/reference/across.html
 hmda_tract <- nathmda_comb %>%
   group_by(
           #census_tract
