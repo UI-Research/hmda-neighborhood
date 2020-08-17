@@ -10,24 +10,36 @@
 
 library(tidyverse)
 
+#Location of raw HMDA data:
+rawfile <- "L:/Libraries/HMDA/Raw/2018_lar.txt"
+
+#Location of income limit data: 
+ilfile <- "D:/NATDATA/hmda-neighborhood/Income Limits/Section8-FY18.csv"
+
+#Where to export filan CSV
+outfile <- "D:/NATDATA/hmda-neighborhood/hmda_tract.csv"
+
 # Set working directory
 ### MM Code Review 8-14: If you open an R project from RStudio (File -> Open Project...) you can use relative file paths within the project and dont need to set working directory
-setwd("D:/NATDATA/hmda-neighborhood")
+#setwd("D:/NATDATA/hmda-neighborhood")
 
 # Read national file and add county code
 ### MM Code Review 8-14: Changed  function read.csv to read_delim, as requested by Rob
-nathmda_in <- read_delim("L:/Libraries/HMDA/Raw/2018_lar.txt",delim="|")
+#nathmda_in <- read_delim("L:/Libraries/HMDA/Raw/2018_lar.txt",delim="|")
 #nathmda_in <- read_delim("2018_lar.txt",delim="|")
 
-nathmda_clean <- mutate(nathmda_in, ucounty =str_pad(county_code, 5, pad = "0")) %>%
-                        filter(state_code %in% c("DC")) 
+nathmda_in <- read_delim(rawfile,delim="|") %>%
+                 mutate(ucounty =str_pad(county_code, 5, pad = "0")) %>%
+                 filter(state_code %in% c("DC")) 
   
 
 # Read income limits file and define max limits for each county
 ### MM Code Review 8-14: Changed function read.csv to read_csv, as requested by Rob
-il_in <- read_csv("D:/NATDATA/hmda-neighborhood/Income Limits/Section8-FY18.csv")
+#il_in <- read_csv("D:/NATDATA/hmda-neighborhood/Income Limits/Section8-FY18.csv")
 #il_in <- read_csv("Income Limits/Section8-FY18.csv") 
-il_clean <- mutate(il_in, st_in =str_pad(State, 2, pad = "0"),
+
+il_in <- read_csv(ilfile) %>%
+            mutate(st_in =str_pad(State, 2, pad = "0"),
                    cnt_in =str_pad(County, 3, pad = "0"),
                    ucounty = paste0(st_in, cnt_in),
                    #Very low income max (Under 50% AMI)
@@ -42,17 +54,16 @@ il_clean <- mutate(il_in, st_in =str_pad(State, 2, pad = "0"),
 
 # Load state and county lists from RDS object
 states <- readRDS("states.rds")
-counties <- readRDS("counties.rds")
-counties2 = data.frame(counties) %>% 
+counties <- readRDS("counties.rds") %>% 
   unite(ucounty, state_fips,county_fips, sep = "", remove = FALSE)
 
 
 # Merge national file state codes
-nathmda_states <- merge(nathmda_clean, states, by.x="state_code", by.y="state_code", all.x=TRUE)
+nathmda_states <- merge(nathmda_in, states, by.x="state_code", by.y="state_code", all.x=TRUE)
 
 
 # Merge national file and counties, flag and create dummy codes for missing tracts/counties
-nathmda_geo <- merge(nathmda_states, counties2, by.x="ucounty", by.y="ucounty", all.x=TRUE) %>% 
+nathmda_geo <- merge(nathmda_states, counties, by.x="ucounty", by.y="ucounty", all.x=TRUE) %>% 
     mutate(missing_tract = case_when(is.na(census_tract)~ 1, TRUE ~ 0), 
            missing_county = case_when(is.na(county_code)~ 1, TRUE ~ 0),
            geo2010 = as.character(census_tract),
@@ -62,7 +73,7 @@ nathmda_geo <- merge(nathmda_states, counties2, by.x="ucounty", by.y="ucounty", 
 
 
 # Merge income limit data and create characteristic flags
-nathmda_flags <-merge(nathmda_geo, il_clean, by.x="ucounty", by.y="ucounty", all.x=TRUE)%>%
+nathmda_flags <-merge(nathmda_geo, il_in, by.x="ucounty", by.y="ucounty", all.x=TRUE)%>%
     mutate(
           #Create income flags 
           actualincome=income*1000,
@@ -351,8 +362,8 @@ nathmda_comb <- nathmda_flags %>%
 # lines of code it takes to calculate these sums and medians: https://dplyr.tidyverse.org/reference/across.html
 hmda_tract <- nathmda_comb %>%
   group_by(
-          #census_tract
-           state_code
+          census_tract
+           #state_code
            ) %>%
   summarize(total_n = n(),
             
@@ -475,11 +486,13 @@ hmda_tract <- nathmda_comb %>%
             
             ) %>% 
   arrange(
-          #census_tract
-          state_code
+          census_tract
+          #state_code
           ) 
 view(hmda_tract)
 
+#Final export
+write_csv(hmda_tract, outfile)
 
 
 #End of program
