@@ -29,7 +29,8 @@ outfile <- "D:/NATDATA/hmda-neighborhood/hmda_tract.csv"
 #nathmda_in <- read_delim("2018_lar.txt",delim="|")
 
 nathmda_in <- read_delim(rawfile,delim="|") %>%
-                 mutate(ucounty =str_pad(county_code, 5, pad = "0")) %>%
+                 mutate(ucounty =str_pad(county_code, 5, pad = "0"),
+                        census_tract=case_when(census_tract=="na" ~ as.character(NA), TRUE ~ as.character(census_tract))) %>%
                  filter(state_code %in% c("DC")) 
   
 
@@ -151,8 +152,6 @@ nathmda_flags <-merge(nathmda_geo, il_in, by.x="ucounty", by.y="ucounty", all.x=
                              newrace_app=="Race Not Available" ~ "Race Not Available",
                              TRUE ~ "NA"),
           
-          race_avail = if_else(hhrace!='Race Not Available' | hhrace!='NA',1,0),
-          
           wht_flag = if_else(hhrace=='White',1,0),
           blk_flag = if_else(hhrace=='Black',1,0),
           hisp_flag = if_else(hhrace=='Hispanic',1,0),
@@ -162,6 +161,8 @@ nathmda_flags <-merge(nathmda_geo, il_in, by.x="ucounty", by.y="ucounty", all.x=
           mrace_flag = if_else(hhrace=='Multiple Races',1,0),
           mixed_flag = if_else(hhrace=='Mixed',1,0),
           narace_flag = if_else(hhrace=='Race Not Available',1,0),
+          
+          race_avail = if_else(narace_flag!=1,1,0),
 
           #Specific Asian race flags (NOT filtered by Hispanic)
           aind_flag = if_else(applicant_race_1 == 21,1,0),
@@ -177,27 +178,21 @@ nathmda_flags <-merge(nathmda_geo, il_in, by.x="ucounty", by.y="ucounty", all.x=
           #Gender flags
           male_flag = if_else(derived_sex=='Male',1,0),
           female_flag = if_else(derived_sex=='Female',1,0),
+          jointsex_flag = if_else(derived_sex=='Joint',1,0),
           nasex_flag = if_else(derived_sex=='Sex Not Available',1,0),
           sex_avail = if_else(nasex_flag != 1,1,0),
-          sex_income_avail = if_else(sex_avail==1 & missing_income ==0),
+          sex_income_avail = if_else(sex_avail==1 & missing_income ==0,1,0),
           
           #Loan amount flag
           missing_loan_amount = case_when(is.na(loan_amount)~ 1, TRUE ~ 0)
-          
+        
           )
 
 #Check frequencies of new race categories          
 table(nathmda_flags$newrace_app)
 table(nathmda_flags$newrace_coapp)
 table(nathmda_flags$hhrace)
-
-#Cross-tab asian categories with Hispanic flag to see how many Hispanic Asians there are
-table(nathmda_flags$hisp_flag,nathmda_flags$aind_flag)
-table(nathmda_flags$hisp_flag,nathmda_flags$achi_flag)
-table(nathmda_flags$hisp_flag,nathmda_flags$afil_flag)
-table(nathmda_flags$hisp_flag,nathmda_flags$ajap_flag)
-table(nathmda_flags$hisp_flag,nathmda_flags$akor_flag)
-table(nathmda_flags$hisp_flag,nathmda_flags$avie_flag)
+table(nathmda_flags$race_avail)
 
 
 # This function creats final variables by taking any flag variables that are input
@@ -212,103 +207,115 @@ create_var <- function(...){
 # Create all combined indicators
 nathmda_comb <- nathmda_flags %>%
   rowwise() %>%
-  mutate(#Top-line indicators
-         orig_lein1=create_var(orig_flag,lein1_flag),
-         orig_sf=create_var(orig_flag,prop1_4_flag),
-         orig_lein1=create_var(orig_flag,lein1_flag),
-         orig_sf=create_var(orig_flag,prop1_4_flag),
-         conv_purch=create_var(conv_flag,purch_flag),
-         conv_refi=create_var(conv_flag,refi_flag),                      
-         deny_sf=create_var(conv_flag,prop1_4_flag,deny_flag),
+  mutate(#Standard flag for all neighborhood HMDA indicators
+         std_flag = create_var(owner_flag,purch_flag,lein1_flag,prop1_4_flag,orig_flag),
+    
+         #Top-line indicators
+         owner_purch = create_var(std_flag),
+         
+         #orig_lein1=create_var(orig_flag,lein1_flag),
+         #orig_sf=create_var(orig_flag,prop1_4_flag),
+         #orig_lein1=create_var(orig_flag,lein1_flag),
+         #orig_sf=create_var(orig_flag,prop1_4_flag),
+         #conv_purch=create_var(conv_flag,purch_flag),
+         #conv_refi=create_var(conv_flag,refi_flag),                      
+         #deny_sf=create_var(conv_flag,prop1_4_flag,deny_flag),
          
          #Denominators
-         income_avail=create_var(income_avail),
-         race_avail=create_var(race_avail),
-         race_income_avail=create_var(race_avail,income_avail),
-         sex_avail=create_var(sex_avail),
-         sex_income_avail=create_var(sex_avail,income_avail),
+         income_avail=create_var(income_avail,std_flag),
+         race_avail=create_var(race_avail,std_flag),
+         race_income_avail=create_var(race_avail,income_avail,std_flag),
+         sex_avail=create_var(sex_avail,std_flag),
+         sex_income_avail=create_var(sex_avail,income_avail,std_flag),
          
          #Owner-occ purchase loans by race
-         wht_purch=create_var(wht_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
-         blk_purch=create_var(blk_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
-         hisp_purch=create_var(hisp_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
-         api_purch=create_var(api_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
-         ais_purch=create_var(ais_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
-         nhpi_purch=create_var(nhpi_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
-         narace_purch=create_var(narace_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
-         othrace_purch=create_var(othrace_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
+         wht_purch=create_var(wht_flag,std_flag),
+         blk_purch=create_var(blk_flag,std_flag),
+         hisp_purch=create_var(hisp_flag,std_flag),
+         api_purch=create_var(api_flag,std_flag),
+         ais_purch=create_var(ais_flag,std_flag),
+         nhpi_purch=create_var(nhpi_flag,std_flag),
+         narace_purch=create_var(narace_flag,std_flag),
+         othrace_purch=create_var(othrace_flag,std_flag),
   
          #Owner-occ purchase loans by specific race 
-         aind_purch=create_var(aind_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
-         achi_purch=create_var(achi_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
-         afil_purch=create_var(afil_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
-         ajap_purch=create_var(ajap_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
-         akor_purch=create_var(akor_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
-         avie_purch=create_var(avie_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
+         aind_purch=create_var(aind_flag,std_flag),
+         achi_purch=create_var(achi_flag,std_flag),
+         afil_purch=create_var(afil_flag,std_flag),
+         ajap_purch=create_var(ajap_flag,std_flag),
+         akor_purch=create_var(akor_flag,std_flag),
+         avie_purch=create_var(avie_flag,std_flag),
          
          #Owner-occ purchase loans by income
-         vlowinc_purch=create_var(vlowinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
-         lowinc_purch=create_var(lowinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
-         medinc_purch=create_var(medinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
-         highinc_purch=create_var(highinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
-         missinginc_purch=create_var(missing_income,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
+         vlowinc_purch=create_var(vlowinc_flag,std_flag),
+         lowinc_purch=create_var(lowinc_flag,std_flag),
+         medinc_purch=create_var(medinc_flag,std_flag),
+         highinc_purch=create_var(highinc_flag,std_flag),
+         missinginc_purch=create_var(missing_income,std_flag),
          
          #Owner-occ purchase loans to white borrowers by income
-         wht_vlowinc=create_var(wht_flag,vlowinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
-         wht_lowinc=create_var(wht_flag,lowinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
-         wht_medinc=create_var(wht_flag,medinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
-         wht_highinc=create_var(wht_flag,highinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
+         wht_vlowinc=create_var(wht_flag,vlowinc_flag,std_flag),
+         wht_lowinc=create_var(wht_flag,lowinc_flag,std_flag),
+         wht_medinc=create_var(wht_flag,medinc_flag,std_flag),
+         wht_highinc=create_var(wht_flag,highinc_flag,std_flag),
          
          #Owner-occ purchase loans to black borrowers by income
-         blk_vlowinc=create_var(blk_flag,vlowinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
-         blk_lowinc=create_var(blk_flag,lowinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
-         blk_medinc=create_var(blk_flag,medinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
-         blk_highinc=create_var(blk_flag,highinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
+         blk_vlowinc=create_var(blk_flag,vlowinc_flag,std_flag),
+         blk_lowinc=create_var(blk_flag,lowinc_flag,std_flag),
+         blk_medinc=create_var(blk_flag,medinc_flag,std_flag),
+         blk_highinc=create_var(blk_flag,highinc_flag,std_flag),
          
          #Owner-occ purchase loans to Hispanic borrowers by income
-         hisp_vlowinc=create_var(hisp_flag,vlowinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
-         hisp_lowinc=create_var(hisp_flag,lowinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
-         hisp_medinc=create_var(hisp_flag,medinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
-         hisp_highinc=create_var(hisp_flag,highinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
+         hisp_vlowinc=create_var(hisp_flag,vlowinc_flag,std_flag),
+         hisp_lowinc=create_var(hisp_flag,lowinc_flag,std_flag),
+         hisp_medinc=create_var(hisp_flag,medinc_flag,std_flag),
+         hisp_highinc=create_var(hisp_flag,highinc_flag,std_flag),
          
          #Owner-occ purchase loans to API borrowers by income
-         api_vlowinc=create_var(api_flag,vlowinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
-         api_lowinc=create_var(api_flag,lowinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
-         api_medinc=create_var(api_flag,medinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
-         api_highinc=create_var(api_flag,highinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
+         api_vlowinc=create_var(api_flag,vlowinc_flag,std_flag),
+         api_lowinc=create_var(api_flag,lowinc_flag,std_flag),
+         api_medinc=create_var(api_flag,medinc_flag,std_flag),
+         api_highinc=create_var(api_flag,highinc_flag,std_flag),
          
          #Owner-occ purchase loans to missing race borrowers by income
-         narace_vlowinc=create_var(narace_flag,vlowinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
-         narace_lowinc=create_var(narace_flag,lowinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
-         narace_medinc=create_var(narace_flag,medinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
-         narace_highinc=create_var(narace_flag,highinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
+         narace_vlowinc=create_var(narace_flag,vlowinc_flag,std_flag),
+         narace_lowinc=create_var(narace_flag,lowinc_flag,std_flag),
+         narace_medinc=create_var(narace_flag,medinc_flag,std_flag),
+         narace_highinc=create_var(narace_flag,highinc_flag,std_flag),
          
          #Owner-occ purchase loans to other race borrowers by income
-         othrace_vlowinc=create_var(othrace_flag,vlowinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
-         othrace_lowinc=create_var(othrace_flag,lowinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
-         othrace_medinc=create_var(othrace_flag,medinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
-         othrace_highinc=create_var(othrace_flag,highinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
+         othrace_vlowinc=create_var(othrace_flag,vlowinc_flag,std_flag),
+         othrace_lowinc=create_var(othrace_flag,lowinc_flag,std_flag),
+         othrace_medinc=create_var(othrace_flag,medinc_flag,std_flag),
+         othrace_highinc=create_var(othrace_flag,highinc_flag,std_flag),
          
          #Owner-occ purchase loans by gender
-         man_purch=create_var(male_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
-         wom_purch=create_var(female_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
-         nasex_purch=create_var(nasex_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
+         man_purch=create_var(male_flag,std_flag),
+         wom_purch=create_var(female_flag,std_flag),
+         mixedsex_purch=create_var(jointsex_flag,std_flag),
+         nasex_purch=create_var(nasex_flag,std_flag),
          
          #Owner-occ purchase loans to male borrowers by income
-         man_vlowinc=create_var(male_flag,vlowinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
-         man_lowinc=create_var(male_flag,lowinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
-         man_medinc=create_var(male_flag,medinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
-         man_highinc=create_var(male_flag,highinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
+         man_vlowinc=create_var(male_flag,vlowinc_flag,std_flag),
+         man_lowinc=create_var(male_flag,lowinc_flag,std_flag),
+         man_medinc=create_var(male_flag,medinc_flag,std_flag),
+         man_highinc=create_var(male_flag,highinc_flag,std_flag),
          
          #Owner-occ purchase loans to female borrowers by income
-         wom_vlowinc=create_var(female_flag,vlowinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
-         wom_lowinc=create_var(female_flag,lowinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
-         wom_medinc=create_var(female_flag,medinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
-         wom_highinc=create_var(female_flag,highinc_flag,owner_flag,purch_flag,lein1_flag,prop1_4_flag),
+         wom_vlowinc=create_var(female_flag,vlowinc_flag,std_flag),
+         wom_lowinc=create_var(female_flag,lowinc_flag,std_flag),
+         wom_medinc=create_var(female_flag,medinc_flag,std_flag),
+         wom_highinc=create_var(female_flag,highinc_flag,std_flag),
+         
+         #Owner-occ purchase loans to female borrowers by income
+         mixedsex_vlowinc=create_var(jointsex_flag,vlowinc_flag,std_flag),
+         mixedsex_lowinc=create_var(jointsex_flag,lowinc_flag,std_flag),
+         mixedsex_medinc=create_var(jointsex_flag,medinc_flag,std_flag),
+         mixedsex_highinc=create_var(jointsex_flag,highinc_flag,std_flag),
          
          #Medians for owner-occ purchase loans
-         medincome = if_else(owner_flag ==1 & purch_flag ==1 & lein1_flag ==1  & prop1_4_flag ==1,actualincome,NaN),
-         medloanamount = if_else(owner_flag ==1 & purch_flag ==1 & lein1_flag ==1  & prop1_4_flag ==1,loan_amount,NaN)
+         medincome = if_else(std_flag ==1,actualincome,NaN),
+         medloanamount = if_else(std_flag ==1,loan_amount,NaN)
          )
   
   
@@ -317,11 +324,10 @@ nathmda_comb <- nathmda_flags %>%
 
 #List of sum variables to include in the final file
 final_vars <- c(#Top-line vars
-                "app_flag","lein1_flag","deny_flag","orig_lein1","orig_sf","purch_flag","conv_purch", 
-                "conv_refi","refi_flag", 
+                "app_flag","owner_purch", "owner_flag","purch_flag","lein1_flag","prop1_4_flag","orig_flag",
                 
                 #Denominator vars
-                "income_avail","race_avail","sex_avail","race_income_avail",
+                "income_avail","race_avail","race_income_avail","sex_avail","sex_income_avail",
                 
                 #Race/ethnicity vars
                 "wht_purch","blk_purch","hisp_purch","api_purch","narace_purch","othrace_purch",
@@ -339,11 +345,12 @@ final_vars <- c(#Top-line vars
                 "othrace_vlowinc","othrace_lowinc","othrace_medinc","othrace_highinc",
                 
                 #Gender vars
-                "man_purch","wom_purch","nasex_purch",
+                "man_purch","wom_purch","mixedsex_purch","nasex_purch",
                 
                 #Gender by income
                 "man_vlowinc","man_lowinc","man_medinc","man_highinc",
                 "wom_vlowinc","wom_lowinc","wom_medinc","wom_highinc",
+                "mixedsex_vlowinc","mixedsex_lowinc","mixedsex_medinc","mixedsex_highinc",
                 
                 #Missing vars
                 "missing_income","missing_loan_amount","missing_tract"
@@ -353,14 +360,10 @@ final_vars <- c(#Top-line vars
 #Final summarize by tract 
 hmda_tract <- nathmda_comb %>%
   group_by(census_tract) %>% 
-  summarise(total_n = n(), 
-            across(final_vars, sum, na.rm = TRUE),
+  summarise(across(final_vars, sum, na.rm = TRUE),
             across(c(medincome,medloanamount), median, na.rm = TRUE)) %>% 
   rename(apps_all=app_flag,
-         lein1=lein1_flag,
-         deny_all=deny_flag,
-         purchases=purch_flag,
-         refis=refi_flag,
+         owner_purchases=owner_purch,
          median_income=medincome,
          median_loan_amount=medloanamount) %>% 
   arrange(census_tract) 
