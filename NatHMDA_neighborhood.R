@@ -10,13 +10,13 @@
 
 library(tidyverse)
 
-#Location of raw HMDA data:
+#Location of raw HMDA data (txt):
 rawfile <- "L:/Libraries/HMDA/Raw/2018_lar.txt"
 
-#Location of income limit data: 
+#Location of income limit data (csv): 
 ilfile <- "D:/NATDATA/hmda-neighborhood/Income Limits/Section8-FY18.csv"
 
-#Where to export filan CSV
+#Where to export final CSV:
 outfile <- "D:/NATDATA/hmda-neighborhood/hmda_tract.csv"
 
 # Set working directory
@@ -30,6 +30,7 @@ outfile <- "D:/NATDATA/hmda-neighborhood/hmda_tract.csv"
 
 nathmda_in <- read_delim(rawfile,delim="|") %>%
                  mutate(ucounty =str_pad(county_code, 5, pad = "0"),
+                        #If the census tract is coded as "na" then switch to proper missing
                         census_tract=case_when(census_tract=="na" ~ as.character(NA), TRUE ~ as.character(census_tract))) %>%
                  filter(state_code %in% c("DC")) 
   
@@ -40,8 +41,11 @@ nathmda_in <- read_delim(rawfile,delim="|") %>%
 #il_in <- read_csv("Income Limits/Section8-FY18.csv") 
 
 il_in <- read_csv(ilfile) %>%
-            mutate(st_in =str_pad(State, 2, pad = "0"),
+            mutate(#Create padded state FIPs code
+                   st_in =str_pad(State, 2, pad = "0"),
+                   #Created padded county code
                    cnt_in =str_pad(County, 3, pad = "0"),
+                   #Create combined state + county code
                    ucounty = paste0(st_in, cnt_in),
                    #Very low income max (Under 50% AMI)
                    vlowmax= l50_4, 
@@ -67,8 +71,11 @@ nathmda_states <- merge(nathmda_in, states, by.x="state_code", by.y="state_code"
 nathmda_geo <- merge(nathmda_states, counties, by.x="ucounty", by.y="ucounty", all.x=TRUE) %>% 
     mutate(missing_tract = case_when(is.na(census_tract)~ 1, TRUE ~ 0), 
            missing_county = case_when(is.na(county_code)~ 1, TRUE ~ 0),
+           #If Census tract is valid then geo2010 is the input census tract
            geo2010 = as.character(census_tract),
+           #If the tract is missing but the county is valid then code as state + county + 000000
            geo2010 = if_else(missing_tract==1 & missing_county==0, paste0(ucounty, "000000"), geo2010),
+           #If the tract and county are missing then code as stae + 000000000
            geo2010 = if_else(missing_tract==1 & missing_county==1, paste0(st_fips, "000000000"), geo2010)
            )
 
@@ -137,10 +144,10 @@ nathmda_flags <-merge(nathmda_geo, il_in, by.x="ucounty", by.y="ucounty", all.x=
                               co_applicant_race_1 == 1 ~ "American Indian or Alaskan Native",
                               TRUE ~ "NA"),
           
-          #If there is a co-applicant and the co-applicant race is different from the applicant race
+          #If there is a co-applicant flag if the co-applicant race is different from the applicant race
           hhmixedrace_flag = if_else(newrace_coapp != "No co-applicant" & newrace_app != "Race Not Available" & newrace_coapp != "Race Not Available" & (newrace_app!=newrace_coapp),1,0),
 
-          #Calculate a household race
+          #Calculate a household race from the applicant and co-applicant race
           hhrace = case_when(hhmixedrace_flag==1 ~ "Mixed",
                              newrace_app=="Hispanic" ~ "Hispanic",
                              newrace_app=="Multiple Races" ~ "Multiple Races",
@@ -152,6 +159,7 @@ nathmda_flags <-merge(nathmda_geo, il_in, by.x="ucounty", by.y="ucounty", all.x=
                              newrace_app=="Race Not Available" ~ "Race Not Available",
                              TRUE ~ "NA"),
           
+          #Flags for individual race/ethnicity variables
           wht_flag = if_else(hhrace=='White',1,0),
           blk_flag = if_else(hhrace=='Black',1,0),
           hisp_flag = if_else(hhrace=='Hispanic',1,0),
@@ -162,6 +170,7 @@ nathmda_flags <-merge(nathmda_geo, il_in, by.x="ucounty", by.y="ucounty", all.x=
           mixed_flag = if_else(hhrace=='Mixed',1,0),
           narace_flag = if_else(hhrace=='Race Not Available',1,0),
           
+          #Race is available denominator
           race_avail = if_else(narace_flag!=1,1,0),
 
           #Specific Asian race flags (NOT filtered by Hispanic)
