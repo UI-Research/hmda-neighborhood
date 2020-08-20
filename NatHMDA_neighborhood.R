@@ -33,13 +33,16 @@ print(paste("Start Time",starttime))
 #nathmda_in <- read_delim("2018_lar.txt",delim="|")
 
 nathmda_in <- read_delim(rawfile,delim="|") %>%
-              mutate(#If the census tract is coded as "na" then switch to proper missing
-                      census_tract=case_when(census_tract=="na" ~ as.character(NA), TRUE ~ as.character(census_tract)),
-                      #If the county is coded as "na" then switch to proper missing
-                      county_code=case_when(county_code %in% c("na","N/AN/","99999") ~ as.character(NA), TRUE ~ as.character(county_code)),
-                      #Create a padded county code from the county code variable
-                      ucounty =str_pad(county_code, 5, pad = "0")) %>%
-                      filter(state_code %in% c("DC")) 
+    mutate(#If the census tract is coded as "na" then switch to proper missing
+        census_tract=case_when(census_tract=="na" ~ as.character(NA), TRUE ~ as.character(census_tract)),
+        #If the county is coded as "na" then switch to proper missing
+        county_code=case_when(county_code %in% c("na","N/AN/","99999") ~ as.character(NA), TRUE ~ as.character(county_code)),
+        #Check the state part of the county code
+        ust = substr(county_code,1,2),
+        #Create ucounty from the county_code var if the state part is valid (00,03,07 AND 80) are not state FIPS codes
+        ucounty = case_when(ust %in% c("00","03","07","80") ~ as.character(NA),
+                            TRUE ~ as.character(county_code))) %>%
+        filter(state_code %in% c("DC")) 
   
 
 # Read income limits file and define max limits for each county
@@ -82,7 +85,7 @@ nathmda_geo <- merge(nathmda_states, counties, by.x="ucounty", by.y="ucounty", a
            missing_tract==0 ~ as.character(census_tract),
            #If the tract is missing but the county is valid then code as state + county + 000000
            missing_tract==1 & missing_county==0 ~ as.character(paste0(ucounty, "000000")),
-           #If the tract and county are missing then code as stae + 000000000
+           #If the tract and county are missing then code as state + 000000000
            missing_tract==1 & missing_county==1 & !is.na(st_fips) ~ as.character(paste0(st_fips, "000000000")),
            #If the geography is completely invalid, use 99999999999
            TRUE ~ "99999999999"))
