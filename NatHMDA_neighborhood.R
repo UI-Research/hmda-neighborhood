@@ -19,6 +19,10 @@ ilfile <- "D:/NATDATA/hmda-neighborhood/Income Limits/Section8-FY18.csv"
 #Where to export final CSV:
 outfile <- "D:/NATDATA/hmda-neighborhood/hmda_tract.csv"
 
+#Start time for log
+starttime <- Sys.time()
+print(paste("Start Time",starttime))
+
 # Set working directory
 ### MM Code Review 8-14: If you open an R project from RStudio (File -> Open Project...) you can use relative file paths within the project and dont need to set working directory
 #setwd("D:/NATDATA/hmda-neighborhood")
@@ -29,10 +33,13 @@ outfile <- "D:/NATDATA/hmda-neighborhood/hmda_tract.csv"
 #nathmda_in <- read_delim("2018_lar.txt",delim="|")
 
 nathmda_in <- read_delim(rawfile,delim="|") %>%
-                 mutate(ucounty =str_pad(county_code, 5, pad = "0"),
-                        #If the census tract is coded as "na" then switch to proper missing
-                        census_tract=case_when(census_tract=="na" ~ as.character(NA), TRUE ~ as.character(census_tract))) %>%
-                 filter(state_code %in% c("DC")) 
+              mutate(#If the census tract is coded as "na" then switch to proper missing
+                      census_tract=case_when(census_tract=="na" ~ as.character(NA), TRUE ~ as.character(census_tract)),
+                      #If the county is coded as "na" then switch to proper missing
+                      county_code=case_when(county_code %in% c("na","N/AN/","99999") ~ as.character(NA), TRUE ~ as.character(county_code)),
+                      #Create a padded county code from the county code variable
+                      ucounty =str_pad(county_code, 5, pad = "0")) %>%
+                      filter(state_code %in% c("DC")) 
   
 
 # Read income limits file and define max limits for each county
@@ -177,7 +184,7 @@ nathmda_flags <-merge(nathmda_geo, il_in, by.x="ucounty", by.y="ucounty", all.x=
           aind_flag = if_else(applicant_race_1 == 21,1,0),
           achi_flag = if_else(applicant_race_1 == 22,1,0),
           afil_flag = if_else(applicant_race_1 == 23,1,0),
-          ajap_flag = if_else(applicant_race_1 == 24,1,0),
+          ajpn_flag = if_else(applicant_race_1 == 24,1,0),
           akor_flag = if_else(applicant_race_1 == 25,1,0),
           avie_flag = if_else(applicant_race_1 == 26,1,0),
           
@@ -193,7 +200,10 @@ nathmda_flags <-merge(nathmda_geo, il_in, by.x="ucounty", by.y="ucounty", all.x=
           sex_income_avail = if_else(sex_avail==1 & missing_income ==0,1,0),
           
           #Loan amount flag
-          missing_loan_amount = case_when(is.na(loan_amount)~ 1, TRUE ~ 0)
+          missing_loan_amount = case_when(is.na(loan_amount)~ 1, TRUE ~ 0),
+          
+          #Standard flag for all neighborhood HMDA indicators
+          std_flag = if_else(owner_flag==1 & purch_flag==1 & lein1_flag==1 & prop1_4_flag==1 & orig_flag==1,1,0)
         
           )
 
@@ -214,12 +224,8 @@ create_var <- function(...){
 
 
 # Create all combined indicators
-nathmda_comb <- nathmda_flags %>%
-  rowwise() %>%
-  mutate(#Standard flag for all neighborhood HMDA indicators
-         std_flag = create_var(owner_flag,purch_flag,lein1_flag,prop1_4_flag,orig_flag),
-    
-         #Top-line indicators
+nathmda_comb <- rowwise(nathmda_flags) %>% 
+  mutate(#Top-line indicators
          owner_purch = create_var(std_flag),
          
          #orig_lein1=create_var(orig_flag,lein1_flag),
@@ -251,7 +257,7 @@ nathmda_comb <- nathmda_flags %>%
          aind_purch=create_var(aind_flag,std_flag),
          achi_purch=create_var(achi_flag,std_flag),
          afil_purch=create_var(afil_flag,std_flag),
-         ajap_purch=create_var(ajap_flag,std_flag),
+         ajpn_purch=create_var(ajpn_flag,std_flag),
          akor_purch=create_var(akor_flag,std_flag),
          avie_purch=create_var(avie_flag,std_flag),
          
@@ -340,7 +346,7 @@ final_vars <- c(#Top-line vars
                 
                 #Race/ethnicity vars
                 "wht_purch","blk_purch","hisp_purch","api_purch","narace_purch","othrace_purch",
-                "aind_purch","achi_purch","afil_purch","ajap_purch","akor_purch","avie_purch",
+                "aind_purch","achi_purch","afil_purch","ajpn_purch","akor_purch","avie_purch",
                 
                 #Income vars
                 "vlowinc_purch","lowinc_purch","medinc_purch","highinc_purch",
@@ -368,18 +374,25 @@ final_vars <- c(#Top-line vars
 
 #Final summarize by tract 
 hmda_tract <- nathmda_comb %>%
-  group_by(census_tract) %>% 
+  group_by(geo2010) %>% 
   summarise(across(final_vars, sum, na.rm = TRUE),
             across(c(medincome,medloanamount), median, na.rm = TRUE)) %>% 
   rename(apps_all=app_flag,
          owner_purchases=owner_purch,
          median_income=medincome,
-         median_loan_amount=medloanamount) %>% 
-  arrange(census_tract) 
+         median_loan_amount=medloanamount,
+         missing_geo=missing_tract) %>% 
+  arrange(geo2010) 
 
 
 #Final export
 write_csv(hmda_tract, outfile)
 
+
+#End time for log
+endtime <- Sys.time()
+totaltime <- endtime - starttime
+print(paste("End Time",endtime))
+print(totaltime)
 
 #End of program
