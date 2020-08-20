@@ -76,15 +76,16 @@ nathmda_states <- merge(nathmda_in, states, by.x="state_code", by.y="state_code"
 
 # Merge national file and counties, flag and create dummy codes for missing tracts/counties
 nathmda_geo <- merge(nathmda_states, counties, by.x="ucounty", by.y="ucounty", all.x=TRUE) %>% 
-    mutate(missing_tract = case_when(is.na(census_tract)~ 1, TRUE ~ 0), 
-           missing_county = case_when(is.na(county_code)~ 1, TRUE ~ 0),
-           #If Census tract is valid then geo2010 is the input census tract
-           geo2010 = as.character(census_tract),
+  mutate(missing_tract = case_when(is.na(census_tract)~ 1, TRUE ~ 0), 
+         missing_county = case_when(is.na(ucounty)~ 1, TRUE ~ 0),
+         geo2010 = case_when(#If Census tract is valid then geo2010 is the input census tract
+           missing_tract==0 ~ as.character(census_tract),
            #If the tract is missing but the county is valid then code as state + county + 000000
-           geo2010 = if_else(missing_tract==1 & missing_county==0, paste0(ucounty, "000000"), geo2010),
+           missing_tract==1 & missing_county==0 ~ as.character(paste0(ucounty, "000000")),
            #If the tract and county are missing then code as stae + 000000000
-           geo2010 = if_else(missing_tract==1 & missing_county==1, paste0(st_fips, "000000000"), geo2010)
-           )
+           missing_tract==1 & missing_county==1 & !is.na(st_fips) ~ as.character(paste0(st_fips, "000000000")),
+           #If the geography is completely invalid, use 99999999999
+           TRUE ~ "99999999999"))
 
 
 # Merge income limit data and create characteristic flags
