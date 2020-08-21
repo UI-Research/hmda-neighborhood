@@ -29,10 +29,6 @@ print(paste("Start Time",starttime))
 
 
 # Read national file and add county code
-### MM Code Review 8-14: Changed  function read.csv to read_delim, as requested by Rob
-#nathmda_in <- read_delim("L:/Libraries/HMDA/Raw/2018_lar.txt",delim="|")
-#nathmda_in <- read_delim("2018_lar.txt",delim="|")
-
 nathmda_in <- read_delim(rawfile,delim="|") %>%
     mutate(#If the census tract is coded as "na" then switch to proper missing
         census_tract=case_when(census_tract=="na" ~ as.character(NA), 
@@ -49,10 +45,6 @@ nathmda_in <- read_delim(rawfile,delim="|") %>%
   
 
 # Read income limits file and define max limits for each county
-### MM Code Review 8-14: Changed function read.csv to read_csv, as requested by Rob
-#il_in <- read_csv("D:/NATDATA/hmda-neighborhood/Income Limits/Section8-FY18.csv")
-#il_in <- read_csv("Income Limits/Section8-FY18.csv") 
-
 il_in <- read_csv(ilfile) %>%
             mutate(#Create padded state FIPs code
                    st_in =str_pad(State, 2, pad = "0"),
@@ -235,14 +227,6 @@ nathmda_comb <- rowwise(nathmda_flags) %>%
   mutate(#Top-line indicators
          owner_purch = create_var(std_flag),
          
-         #orig_lein1=create_var(orig_flag,lein1_flag),
-         #orig_sf=create_var(orig_flag,prop1_4_flag),
-         #orig_lein1=create_var(orig_flag,lein1_flag),
-         #orig_sf=create_var(orig_flag,prop1_4_flag),
-         #conv_purch=create_var(conv_flag,purch_flag),
-         #conv_refi=create_var(conv_flag,refi_flag),                      
-         #deny_sf=create_var(conv_flag,prop1_4_flag,deny_flag),
-         
          #Denominators
          income_avail=create_var(income_avail,std_flag),
          race_avail=create_var(race_avail,std_flag),
@@ -347,7 +331,6 @@ nathmda_comb <- rowwise(nathmda_flags) %>%
 #List of sum variables to include in the final file
 final_vars <- c(#Top-line vars
                 "app_flag","owner_purch", 
-                #"owner_flag","purch_flag","lein1_flag","prop1_4_flag","orig_flag",
                 
                 #Denominator vars
                 "income_avail","race_avail","race_income_avail","sex_avail","sex_income_avail",
@@ -398,7 +381,7 @@ hmda_final <- mutate(hmda_tract, invalid_geo = if_else(missing_geo>0,1,0)) %>%
   select(-missing_geo)
 
 
-#Final export
+#Export final CSV
 write_csv(hmda_final, outfile)
 
 
