@@ -16,6 +16,10 @@ rawfile <- "L:/Libraries/HMDA/Raw/2018_lar.txt"
 #Location of income limit data (csv): 
 ilfile <- "D:/NATDATA/hmda-neighborhood/Income Limits/Section8-FY18.csv"
 
+#Location of county and states geography files (rds)
+statefile <- "D:/NATDATA/hmda-neighborhood/states.rds"
+countyfile <- "D:/NATDATA/hmda-neighborhood/counties.rds"
+
 #Where to export final CSV:
 outfile <- "D:/NATDATA/hmda-neighborhood/hmda_tract.csv"
 
@@ -23,9 +27,6 @@ outfile <- "D:/NATDATA/hmda-neighborhood/hmda_tract.csv"
 starttime <- Sys.time()
 print(paste("Start Time",starttime))
 
-# Set working directory
-### MM Code Review 8-14: If you open an R project from RStudio (File -> Open Project...) you can use relative file paths within the project and dont need to set working directory
-#setwd("D:/NATDATA/hmda-neighborhood")
 
 # Read national file and add county code
 ### MM Code Review 8-14: Changed  function read.csv to read_delim, as requested by Rob
@@ -34,13 +35,15 @@ print(paste("Start Time",starttime))
 
 nathmda_in <- read_delim(rawfile,delim="|") %>%
     mutate(#If the census tract is coded as "na" then switch to proper missing
-        census_tract=case_when(census_tract=="na" ~ as.character(NA), TRUE ~ as.character(census_tract)),
-        #If the county is coded as "na" then switch to proper missing
-        county_code=case_when(county_code %in% c("na","N/AN/","99999") ~ as.character(NA), TRUE ~ as.character(county_code)),
+        census_tract=case_when(census_tract=="na" ~ as.character(NA), 
+                               TRUE ~ as.character(census_tract)),
+        #If the county is coded as "na" or "99999" then switch to proper missing
+        county_code=case_when(county_code %in% c("na","N/AN/","99999") ~ as.character(NA), 
+                              TRUE ~ as.character(county_code)),
         #Check the state part of the county code
         ust = substr(county_code,1,2),
         #Create ucounty from the county_code var if the state part is valid (00,03,07 AND 80) are not state FIPS codes
-        ucounty = case_when(ust %in% c("00","03","07","80") ~ as.character(NA),
+        ucounty = case_when(ust %in% c("00","03","07","80") ~ as.character(NA), 
                             TRUE ~ as.character(county_code))) %>%
         filter(state_code %in% c("DC")) 
   
@@ -68,8 +71,8 @@ il_in <- read_csv(ilfile) %>%
 
 
 # Load state and county lists from RDS object
-states <- readRDS("states.rds")
-counties <- readRDS("counties.rds") %>% 
+states <- readRDS(statefile)
+counties <- readRDS(countyfile) %>% 
   unite(ucounty, state_fips,county_fips, sep = "", remove = FALSE)
 
 
@@ -208,8 +211,8 @@ nathmda_flags <-merge(nathmda_geo, il_in, by.x="ucounty", by.y="ucounty", all.x=
           
           #Standard flag for all neighborhood HMDA indicators
           std_flag = if_else(owner_flag==1 & purch_flag==1 & lein1_flag==1 & prop1_4_flag==1 & orig_flag==1,1,0)
-        
-          )
+          ) 
+
 
 #Check frequencies of new race categories          
 table(nathmda_flags$newrace_app)
@@ -335,7 +338,7 @@ nathmda_comb <- rowwise(nathmda_flags) %>%
          #Medians for owner-occ purchase loans
          medincome = if_else(std_flag ==1,actualincome,NaN),
          medloanamount = if_else(std_flag ==1,loan_amount,NaN)
-         )
+         ) 
   
   
 
@@ -343,7 +346,8 @@ nathmda_comb <- rowwise(nathmda_flags) %>%
 
 #List of sum variables to include in the final file
 final_vars <- c(#Top-line vars
-                "app_flag","owner_purch", "owner_flag","purch_flag","lein1_flag","prop1_4_flag","orig_flag",
+                "app_flag","owner_purch", 
+                #"owner_flag","purch_flag","lein1_flag","prop1_4_flag","orig_flag",
                 
                 #Denominator vars
                 "income_avail","race_avail","race_income_avail","sex_avail","sex_income_avail",
@@ -372,11 +376,11 @@ final_vars <- c(#Top-line vars
                 "mixedsex_vlowinc","mixedsex_lowinc","mixedsex_medinc","mixedsex_highinc",
                 
                 #Missing vars
-                "missing_income","missing_loan_amount","missing_tract"
+                "missing_tract"
                 )
 
 
-#Final summarize by tract 
+#Summarize by tract 
 hmda_tract <- nathmda_comb %>%
   group_by(geo2010) %>% 
   summarise(across(final_vars, sum, na.rm = TRUE),
@@ -389,8 +393,13 @@ hmda_tract <- nathmda_comb %>%
   arrange(geo2010) 
 
 
+#Final cleanup
+hmda_final <- mutate(hmda_tract, invalid_geo = if_else(missing_geo>0,1,0)) %>%
+  select(-missing_geo)
+
+
 #Final export
-write_csv(hmda_tract, outfile)
+write_csv(hmda_final, outfile)
 
 
 #End time for log
