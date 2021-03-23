@@ -173,6 +173,7 @@ nathmda_flags <-merge(nathmda_geo, il_in, by.x="ucounty", by.y="ucounty", all.x=
           nhpi_flag = if_else(hhrace=='Native Hawaiian or Other Pacific Islander',1,0),
           ais_flag = if_else(hhrace=='Asian',1,0),
           api_flag = if_else(hhrace %in% c('Native Hawaiian or Other Pacific Islander','Asian'),1,0),
+          aian_flag = if_else(hhrace=='American Indian or Alaskan Native',1,0),
           mrace_flag = if_else(hhrace=='Multiple Races',1,0),
           mixed_flag = if_else(hhrace=='Mixed',1,0),
           narace_flag = if_else(hhrace=='Race Not Available',1,0),
@@ -242,6 +243,8 @@ nathmda_comb <- rowwise(nathmda_flags) %>%
          api_purch=create_var(api_flag,std_flag),
          ais_purch=create_var(ais_flag,std_flag),
          nhpi_purch=create_var(nhpi_flag,std_flag),
+         aian_purch=create_var(aian_flag,std_flag),
+         mrace_purch=create_var(mrace_flag,std_flag),
          narace_purch=create_var(narace_flag,std_flag),
          othrace_purch=create_var(othrace_flag,std_flag),
   
@@ -278,11 +281,23 @@ nathmda_comb <- rowwise(nathmda_flags) %>%
          hisp_modinc=create_var(hisp_flag,modinc_flag,std_flag),
          hisp_highinc=create_var(hisp_flag,highinc_flag,std_flag),
          
+         #Owner-occ purchase loans to American Indian or Alaskan Native borrowers by income
+         aian_vlowinc=create_var(aian_flag,vlowinc_flag,std_flag),
+         aian_lowinc=create_var(aian_flag,lowinc_flag,std_flag),
+         aian_modinc=create_var(aian_flag,modinc_flag,std_flag),
+         aian_highinc=create_var(aian_flag,highinc_flag,std_flag),
+         
          #Owner-occ purchase loans to API borrowers by income
          api_vlowinc=create_var(api_flag,vlowinc_flag,std_flag),
          api_lowinc=create_var(api_flag,lowinc_flag,std_flag),
          api_modinc=create_var(api_flag,modinc_flag,std_flag),
          api_highinc=create_var(api_flag,highinc_flag,std_flag),
+         
+         #Owner-occ purchase loans to multiple race/ethnicity borrowers by income
+         mrace_vlowinc=create_var(mrace_flag,vlowinc_flag,std_flag),
+         mrace_lowinc=create_var(mrace_flag,lowinc_flag,std_flag),
+         mrace_modinc=create_var(mrace_flag,modinc_flag,std_flag),
+         mrace_highinc=create_var(mrace_flag,highinc_flag,std_flag),
          
          #Owner-occ purchase loans to missing race borrowers by income
          narace_vlowinc=create_var(narace_flag,vlowinc_flag,std_flag),
@@ -337,8 +352,8 @@ final_vars <- c(#Top-line vars
                 "income_avail","race_avail","race_income_avail","sex_avail","sex_income_avail",
                 
                 #Race/ethnicity vars
-                "wht_purch","blk_purch","hisp_purch","api_purch","narace_purch","othrace_purch",
-                "aind_purch","achi_purch","afil_purch","ajpn_purch","akor_purch","avie_purch",
+                "wht_purch","blk_purch","hisp_purch","api_purch","mrace_purch","narace_purch","othrace_purch",
+                "aian_purch","aind_purch","achi_purch","afil_purch","ajpn_purch","akor_purch","avie_purch",
                 
                 #Income vars
                 "vlowinc_purch","lowinc_purch","modinc_purch","highinc_purch",
@@ -347,17 +362,19 @@ final_vars <- c(#Top-line vars
                 "wht_vlowinc","wht_lowinc","wht_modinc","wht_highinc",
                 "blk_vlowinc","blk_lowinc","blk_modinc","blk_highinc",
                 "hisp_vlowinc","hisp_lowinc","hisp_modinc","hisp_highinc",
+                "aian_vlowinc","aian_lowinc","aian_modinc","aian_highinc",
                 "api_vlowinc","api_lowinc","api_modinc","api_highinc",
+                "mrace_vlowinc","mrace_lowinc","mrace_modinc","mrace_highinc",
                 "narace_vlowinc","narace_lowinc","narace_modinc","narace_highinc",
                 "othrace_vlowinc","othrace_lowinc","othrace_modinc","othrace_highinc",
                 
                 #Gender vars
-                "man_purch","wom_purch","mixedsex_purch","nasex_purch",
+                #"man_purch","wom_purch","mixedsex_purch","nasex_purch",
                 
                 #Gender by income
-                "man_vlowinc","man_lowinc","man_modinc","man_highinc",
-                "wom_vlowinc","wom_lowinc","wom_modinc","wom_highinc",
-                "mixedsex_vlowinc","mixedsex_lowinc","mixedsex_modinc","mixedsex_highinc",
+                #"man_vlowinc","man_lowinc","man_modinc","man_highinc",
+                #"wom_vlowinc","wom_lowinc","wom_modinc","wom_highinc",
+                #"mixedsex_vlowinc","mixedsex_lowinc","mixedsex_modinc","mixedsex_highinc",
                 
                 #Missing vars
                 "missing_tract"
