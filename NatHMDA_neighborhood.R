@@ -121,6 +121,7 @@ nathmda_flags <-merge(nathmda_geo, il_in, by.x="ucounty", by.y="ucounty", all.x=
 
           #Lein flag
           lein1_flag = if_else(lien_status==1,1,0),
+          lein2_flag = if_else(lien_status==2,1,0),
           
           #Owner occupancy flag
           owner_flag = if_else(occupancy_type==1,1,0),
@@ -229,12 +230,25 @@ nathmda_comb <- rowwise(nathmda_flags) %>%
   mutate(#Top-line indicators
          owner_purch = create_var(std_flag),
          
+         #Originations by loan type
+         purch_orig=create_var(purch_flag,orig_flag),
+         impr_orig=create_var(impr_flag,orig_flag),
+         refi_orig=create_var(refi_flag,orig_flag),
+         othpurp_orig=create_var(othpurp_flag,orig_flag),
+         
+         prop1_4_orig=create_var(prop1_4_flag,orig_flag),
+         prop5_orig=create_var(prop5_flag,orig_flag),
+         
+         lein1_orig=create_var(lein1_flag,orig_flag),
+         lein2_orig=create_var(lein2_flag,orig_flag),
+         
          #Denominators
          income_avail=create_var(income_avail,std_flag),
          race_avail=create_var(race_avail,std_flag),
          race_income_avail=create_var(race_avail,income_avail,std_flag),
          sex_avail=create_var(sex_avail,std_flag),
          sex_income_avail=create_var(sex_avail,income_avail,std_flag),
+         
          
          #Owner-occ purchase loans by race
          wht_purch=create_var(wht_flag,std_flag),
@@ -312,28 +326,28 @@ nathmda_comb <- rowwise(nathmda_flags) %>%
          othrace_highinc=create_var(othrace_flag,highinc_flag,std_flag),
          
          #Owner-occ purchase loans by gender
-         man_purch=create_var(male_flag,std_flag),
-         wom_purch=create_var(female_flag,std_flag),
-         mixedsex_purch=create_var(jointsex_flag,std_flag),
-         nasex_purch=create_var(nasex_flag,std_flag),
+         #man_purch=create_var(male_flag,std_flag),
+         #wom_purch=create_var(female_flag,std_flag),
+         #mixedsex_purch=create_var(jointsex_flag,std_flag),
+         #nasex_purch=create_var(nasex_flag,std_flag),
          
          #Owner-occ purchase loans to male borrowers by income
-         man_vlowinc=create_var(male_flag,vlowinc_flag,std_flag),
-         man_lowinc=create_var(male_flag,lowinc_flag,std_flag),
-         man_modinc=create_var(male_flag,modinc_flag,std_flag),
-         man_highinc=create_var(male_flag,highinc_flag,std_flag),
+         #man_vlowinc=create_var(male_flag,vlowinc_flag,std_flag),
+         #man_lowinc=create_var(male_flag,lowinc_flag,std_flag),
+         #man_modinc=create_var(male_flag,modinc_flag,std_flag),
+         #man_highinc=create_var(male_flag,highinc_flag,std_flag),
          
          #Owner-occ purchase loans to female borrowers by income
-         wom_vlowinc=create_var(female_flag,vlowinc_flag,std_flag),
-         wom_lowinc=create_var(female_flag,lowinc_flag,std_flag),
-         wom_modinc=create_var(female_flag,modinc_flag,std_flag),
-         wom_highinc=create_var(female_flag,highinc_flag,std_flag),
+         #wom_vlowinc=create_var(female_flag,vlowinc_flag,std_flag),
+         #wom_lowinc=create_var(female_flag,lowinc_flag,std_flag),
+         #wom_modinc=create_var(female_flag,modinc_flag,std_flag),
+         #wom_highinc=create_var(female_flag,highinc_flag,std_flag),
          
          #Owner-occ purchase loans to female borrowers by income
-         mixedsex_vlowinc=create_var(jointsex_flag,vlowinc_flag,std_flag),
-         mixedsex_lowinc=create_var(jointsex_flag,lowinc_flag,std_flag),
-         mixedsex_modinc=create_var(jointsex_flag,modinc_flag,std_flag),
-         mixedsex_highinc=create_var(jointsex_flag,highinc_flag,std_flag),
+         #mixedsex_vlowinc=create_var(jointsex_flag,vlowinc_flag,std_flag),
+         #mixedsex_lowinc=create_var(jointsex_flag,lowinc_flag,std_flag),
+         #mixedsex_modinc=create_var(jointsex_flag,modinc_flag,std_flag),
+         #mixedsex_highinc=create_var(jointsex_flag,highinc_flag,std_flag),
          
          #Medians for owner-occ purchase loans
          medincome = if_else(std_flag ==1,actualincome,NaN),
@@ -347,6 +361,11 @@ nathmda_comb <- rowwise(nathmda_flags) %>%
 #List of sum variables to include in the final file
 final_vars <- c(#Top-line vars
                 "app_flag","owner_purch", 
+                
+                #origination vars
+                "purch_orig","impr_orig","refi_orig","othpurp_orig",
+                "prop1_4_orig","prop5_orig",
+                "lein1_orig","lein2_orig",
                 
                 #Denominator vars
                 "income_avail","race_avail","race_income_avail","sex_avail","sex_income_avail",
