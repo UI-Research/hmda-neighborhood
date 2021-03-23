@@ -249,7 +249,6 @@ nathmda_comb <- rowwise(nathmda_flags) %>%
          sex_avail=create_var(sex_avail,std_flag),
          sex_income_avail=create_var(sex_avail,income_avail,std_flag),
          
-         
          #Owner-occ purchase loans by race
          wht_purch=create_var(wht_flag,std_flag),
          blk_purch=create_var(blk_flag,std_flag),
@@ -360,7 +359,7 @@ nathmda_comb <- rowwise(nathmda_flags) %>%
 
 #List of sum variables to include in the final file
 final_vars <- c(#Top-line vars
-                "app_flag","owner_purch", 
+                #"app_flag","owner_purch", 
                 
                 #origination vars
                 "purch_orig","impr_orig","refi_orig","othpurp_orig",
@@ -405,8 +404,8 @@ hmda_tract <- nathmda_comb %>%
   group_by(geo2010) %>% 
   summarise(across(final_vars, sum, na.rm = TRUE),
             across(c(medincome,medloanamount), median, na.rm = TRUE)) %>% 
-  rename(apps_all=app_flag,
-         owner_purchases=owner_purch,
+  rename(#apps_all=app_flag,
+         #owner_purchases=owner_purch,
          median_income=medincome,
          median_loan_amount=medloanamount,
          missing_geo=missing_tract) %>% 
