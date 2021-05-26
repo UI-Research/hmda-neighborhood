@@ -40,9 +40,7 @@ nathmda_in <- read_delim(rawfile,delim="|") %>%
         ust = substr(county_code,1,2),
         #Create ucounty from the county_code var if the state part is valid (00,03,07 AND 80) are not state FIPS codes
         ucounty = case_when(ust %in% c("00","03","07","80") ~ as.character(NA), 
-                            TRUE ~ as.character(county_code))) %>%
-        #filter(state_code %in% c("DC")) 
-        slice(1:20000)
+                            TRUE ~ as.character(county_code)))
   
 
 # Read income limits file and define max limits for each county
