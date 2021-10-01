@@ -11,17 +11,17 @@
 library(tidyverse)
 
 #Location of raw HMDA data (txt):
-rawfile <- "//sas1/dcdata/Libraries/HMDA/Raw/2018_public_lar_pipe.txt"
+rawfile <- "//sas1/dcdata/Libraries/HMDA/Raw/2020_public_lar_pipe.txt"
 
 #Location of income limit data (csv): 
-ilfile <- "D:/NATDATA/hmda-neighborhood/Income Limits/Section8-FY18.csv"
+ilfile <- "D:/NATDATA/hmda-neighborhood/Income Limits/Section8-FY20.csv"
 
 #Location of county and states geography files (rds)
 statefile <- "D:/NATDATA/hmda-neighborhood/states.rds"
 countyfile <- "D:/NATDATA/hmda-neighborhood/counties.rds"
 
 #Where to export final CSV:
-outfile <- "D:/NATDATA/hmda-neighborhood/hmda_tract.csv"
+outfile <- "D:/NATDATA/hmda-neighborhood/hmda_tract_2020.csv"
 
 #Start time for log
 starttime <- Sys.time()
