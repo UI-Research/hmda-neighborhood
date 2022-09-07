@@ -11,24 +11,24 @@
 library(tidyverse)
 
 #Location of raw HMDA data (txt):
-rawfile <- "//sas1/dcdata/Libraries/HMDA/Raw/2018_public_lar_pipe.txt"
+rawfile <- "//sas1/dcdata/Libraries/HMDA/Raw/2020_public_lar_pipe.txt"
 
 #Location of income limit data (csv): 
-ilfile <- "D:/NATDATA/hmda-neighborhood/Income Limits/Section8-FY18.csv"
+ilfile <- "D:/NATDATA/hmda-neighborhood/Income Limits/Section8-FY20.csv"
 
 #Location of county and states geography files (rds)
 statefile <- "D:/NATDATA/hmda-neighborhood/states.rds"
 countyfile <- "D:/NATDATA/hmda-neighborhood/counties.rds"
 
 #Where to export final CSV:
-outfile <- "D:/NATDATA/hmda-neighborhood/hmda_tract.csv"
+outfile <- "D:/NATDATA/hmda-neighborhood/hmda_tract_2020.csv"
 
 #Start time for log
 starttime <- Sys.time()
 print(paste("Start Time",starttime))
 
-
 # Read national file and add county code
+print(paste("Step 1: Read national file and add county code",Sys.time()))
 nathmda_in <- read_delim(rawfile,delim="|") %>%
     mutate(#If the census tract is coded as "na" then switch to proper missing
         census_tract=case_when(census_tract=="na" ~ as.character(NA), 
@@ -44,6 +44,7 @@ nathmda_in <- read_delim(rawfile,delim="|") %>%
   
 
 # Read income limits file and define max limits for each county
+print(paste("Step 2: Read income limits file and define max limits for each county",Sys.time()))
 il_in <- read_csv(ilfile) %>%
             mutate(#Create padded state FIPs code
                    st_in =str_pad(State, 2, pad = "0"),
@@ -62,16 +63,19 @@ il_in <- read_csv(ilfile) %>%
 
 
 # Load state and county lists from RDS object
+print(paste("Step 3: Load state and county lists from RDS object",Sys.time()))
 states <- readRDS(statefile)
 counties <- readRDS(countyfile) %>% 
   unite(ucounty, state_fips,county_fips, sep = "", remove = FALSE)
 
 
 # Merge national file state codes
+print(paste("Step 4: Merge national file state codes",Sys.time()))
 nathmda_states <- merge(nathmda_in, states, by.x="state_code", by.y="state_code", all.x=TRUE)
 
 
 # Merge national file and counties, flag and create dummy codes for missing tracts/counties
+print(paste("Step 5: Merge national file and counties, flag and create dummy codes for missing tracts/counties",Sys.time()))
 nathmda_geo <- merge(nathmda_states, counties, by.x="ucounty", by.y="ucounty", all.x=TRUE) %>% 
   mutate(missing_tract = case_when(is.na(census_tract)~ 1, TRUE ~ 0), 
          missing_county = case_when(is.na(ucounty)~ 1, TRUE ~ 0),
@@ -86,6 +90,8 @@ nathmda_geo <- merge(nathmda_states, counties, by.x="ucounty", by.y="ucounty", a
 
 
 # Merge income limit data and create characteristic flags
+print(paste("Step 6: Merge income limit data and create characteristic flags",Sys.time()))
+
 nathmda_flags <-merge(nathmda_geo, il_in, by.x="ucounty", by.y="ucounty", all.x=TRUE)%>%
     mutate(
           #Create income flags 
@@ -207,7 +213,8 @@ nathmda_flags <-merge(nathmda_geo, il_in, by.x="ucounty", by.y="ucounty", all.x=
           ) 
 
 
-#Check frequencies of new race categories          
+#Check frequencies of new race categories
+print(paste("Step 7: Check frequencies of new race categories",Sys.time()))
 table(nathmda_flags$newrace_app)
 table(nathmda_flags$newrace_coapp)
 table(nathmda_flags$hhrace)
@@ -224,6 +231,7 @@ create_var <- function(...){
 
 
 # Create all combined indicators
+print(paste("Step 8: Create all combined indicators",Sys.time()))
 nathmda_comb <- rowwise(nathmda_flags) %>% 
   mutate(#Top-line indicators
          owner_purch = create_var(std_flag),
@@ -398,6 +406,7 @@ final_vars <- c(#Top-line vars
 
 
 #Summarize by tract 
+print(paste("Step 9: Summarize by tract",Sys.time()))
 hmda_tract <- nathmda_comb %>%
   group_by(geo2010) %>% 
   summarise(across(final_vars, sum, na.rm = TRUE),
@@ -411,18 +420,20 @@ hmda_tract <- nathmda_comb %>%
 
 
 #Final cleanup
+print(paste("Step 10: Final cleanup",Sys.time()))
 hmda_final <- mutate(hmda_tract, invalid_geo = if_else(missing_geo>0,1,0)) %>%
   select(-missing_geo)
 
 
 #Export final CSV
+print(paste("Step 11: Export CSV",Sys.time()))
 write_csv(hmda_final, outfile)
 
 
 #End time for log
 endtime <- Sys.time()
 totaltime <- endtime - starttime
-print(paste("End Time",endtime))
-print(totaltime)
+print(paste("End Time:",endtime))
+print(paste("Total Run Time:",totaltime))
 
 #End of program
