@@ -112,7 +112,7 @@ hmda_columns = c(
   "derived_sex",
   "applicant_age",
   "co_applicant_age",
-  "purchaser_type",
+  "purchaser_type"
   )
 
 income_limits_columns = c(
@@ -149,7 +149,9 @@ nathmda_in <- read_parquet(rawfile, col_select = hmda_columns) %>%
       #Create ucounty from the county_code var if the state part is valid; 00, 03, 07 and 80 are not state FIPS codes
       ucounty = case_when(
         ust %in% c("00","03","07","80") ~ as.character(NA), 
-        TRUE ~ as.character(county_code)))
+        TRUE ~ as.character(county_code))) %>%
+  
+    sample_n(100000)
   
 # Read income limits file and define max limits for each county
 print(paste("Step 2: Read income limits file and define max limits for each county", Sys.time()))
@@ -194,39 +196,30 @@ print(paste("Step 3: Load state and county lists from RDS object", Sys.time()))
 states_tigris <- tigris::fips_codes %>%
   unite(ucounty, state_code, county_code, sep = "", remove = F) %>%
   select(-c(state_name, county))
-
-
 ```
 
-```{r new variables}
+```{r acs housing variables}
+acs_housing = read_csv(here("data-raw", "acs_5yr_2019_owner_occupied_housing.csv"))
 
-nathmda_in %>% select(applicant_age, co_applicant_age) %>%
-  mutate(
-    across(c(applicant_age, co_applicant_age), 
-    ~ case_when(
-      . %in% c("8888", "9999") ~ NA_character_, ##these aren't defined in the documentation...
-      . %in% c("25-34", "35-44") ~ "25-44",
-      . %in% c("45-54", "55-64") ~ "45-64",
-      . %in% c("65-74", ">74") ~ "65+",
-      T ~ .
-    )))
-    
-acs_vars = c(
-  "B25003_001", #total occupied housing units
-  "B25003_002" #owner-occupied units
-)
+#acs_vars = c(
+#  "B25003_001", #total occupied housing units
+#  "B25003_002" #owner-occupied units
+#)
 
-census_year = 2019
-acs_housing = map_dfr(
-  datasets::state.abb,
-  ~ tidycensus::get_acs(
-      state = .,
-      variables = acs_vars,
-      year = census_year,
-      geography = "tract",
-      survey = "acs5",
-      output = "wide")) %>%
-  select(GEOID, housing_units_occupied_total = B25003_001E, housing_units_occupied_owner = B25003_002E)
+#census_year = 2019
+
+#acs_housing = map_dfr(
+#  datasets::state.abb,
+#  ~ tidycensus::get_acs(
+#      state = .,
+#      variables = acs_vars,
+#      year = census_year,
+#      geography = "tract",
+#      survey = "acs5",
+#      output = "wide")) %>%
+#  select(GEOID, housing_units_occupied_total = B25003_001E, housing_units_occupied_owner = B25003_002E)
+
+#write_csv(acs_housing, here("data-raw", "acs_5yr_2019_owner_occupied_housing.csv"))
 ```
 
 
@@ -257,8 +250,7 @@ nathmda_geo <- nathmda_states %>%
       missing_tract == 1 & missing_county == 1 & !is.na(state_code) ~ as.character(paste0(state_code, "000000000")),
       
       #If the geography is completely invalid, use 99999999999
-      TRUE ~ "99999999999")) %>%
-  left_join(acs_housing, by = c("geo2010" = "GEOID"))
+      TRUE ~ "99999999999"))
 
 # Merge income limit data and create characteristic flags
 print(paste("Step 6: Merge income limit data and create characteristic flags", Sys.time()))
@@ -395,11 +387,24 @@ nathmda_flags <- left_join(nathmda_geo, il_in, by = "ucounty") %>%
           T ~ .
         )),
       
-      older_adult_flag = if_else(applicant_age == "65+" && co_applicant_age == "65+", 1, 0), ## need to include cases when there is no co_applicant (potentially the 8888 value?)
-      middle_adult_flag = if_else(applicant_age %in% c("25-44", "45-64") && co_applicant_age %in% c("25-44", "45-64"), 1, 0), ## need to include cases when there is no co_applicant
-      younger_adult_flag = if_else(applicant_age == "<25" && co_applicant_age == "<25", 1, 0), ## need to include cases when there is no co_applicant
+      older_adult_flag = case_when(
+        applicant_age == "65+" & co_applicant_age == "65+" ~ 1,
+        applicant_age == "65+" & is.na(co_applicant_age) ~ 1,
+        is.na(applicant_age) & co_applicant_age == "65+" ~ 1,
+        T ~ 0),
       
-          
+      middle_adult_flag = case_when(
+        applicant_age %in% c("25-44", "45-64") & co_applicant_age %in% c("25-44", "45-64") ~ 1,
+        applicant_age %in% c("25-44", "45-64") & is.na(co_applicant_age) ~ 1,
+        is.na(applicant_age) & co_applicant_age %in% c("25-44", "45-64") ~ 1,
+        T ~ 0),
+      
+      younger_adult_flag = case_when(
+        applicant_age == "<25" & co_applicant_age == "<25" ~ 1,
+        applicant_age == "<25" & is.na(co_applicant_age) ~ 1,
+        is.na(applicant_age) & co_applicant_age == "<25" ~ 1,
+        T ~ 0),
+    
       #Standard flag for all neighborhood HMDA indicators
       std_flag = if_else(owner_flag == 1 & purch_flag == 1 & lien1_flag == 1 & prop1_4_flag == 1 & orig_flag == 1, 1, 0)
     ) 
@@ -412,8 +417,28 @@ table(nathmda_flags$newrace_coapp)
 table(nathmda_flags$hhrace)
 table(nathmda_flags$race_avail)
 
-```
 
+library(skimr)
+
+nathmda_flags %>% 
+  select(matches("age"), matches("adult")) %>%
+  skim
+
+nathmda_flags %>%
+  select(matches("age")) %>%
+  table %>%
+  prop.table %>%
+  round(digits = 2)
+
+nathmda_in %>% 
+  select(matches("age")) %>%
+  mutate(across(everything(), ~ if_else(. %in% c("8888", "9999"), NA_character_, .))) %>%
+  table %>%
+  prop.table %>%
+  round(digits = 2)
+
+nathmda_flags %>% colnames %>% sort
+```
 
 ```{r developing final indicators}
 # This function creates final variables by taking any flag variables that are input
@@ -425,7 +450,7 @@ create_var <- function(...){
 }
 
 # Create all combined indicators
-print(paste("Step 8: Create all combined indicators",Sys.time()))
+print(paste("Step 8: Create all combined indicators", Sys.time()))
 
 nathmda_comb <- rowwise(nathmda_flags) %>% 
   mutate(#Top-line indicators
@@ -514,16 +539,16 @@ nathmda_comb <- rowwise(nathmda_flags) %>%
          mrace_highinc=create_var(mrace_flag, highinc_flag, std_flag),
          
          #Owner-occ purchase loans to missing race borrowers by income
-         narace_vlowinc=create_var(narace_flag, vlowinc_flag, std_flag),
-         narace_lowinc=create_var(narace_flag, lowinc_flag, std_flag),
-         narace_modinc=create_var(narace_flag, modinc_flag, std_flag),
-         narace_highinc=create_var(narace_flag, highinc_flag, std_flag),
+         narace_vlowinc = create_var(narace_flag, vlowinc_flag, std_flag),
+         narace_lowinc = create_var(narace_flag, lowinc_flag, std_flag),
+         narace_modinc = create_var(narace_flag, modinc_flag, std_flag),
+         narace_highinc = create_var(narace_flag, highinc_flag, std_flag),
          
          #Owner-occ purchase loans to other race borrowers by income
-         othrace_vlowinc=create_var(othrace_flag, vlowinc_flag, std_flag),
-         othrace_lowinc=create_var(othrace_flag, lowinc_flag, std_flag),
-         othrace_modinc=create_var(othrace_flag, modinc_flag, std_flag),
-         othrace_highinc=create_var(othrace_flag, highinc_flag, std_flag),
+         othrace_vlowinc = create_var(othrace_flag, vlowinc_flag, std_flag),
+         othrace_lowinc = create_var(othrace_flag, lowinc_flag, std_flag),
+         othrace_modinc = create_var(othrace_flag, modinc_flag, std_flag),
+         othrace_highinc = create_var(othrace_flag, highinc_flag, std_flag),
          
          #Owner-occ purchase loans by gender
          #man_purch=create_var(male_flag,std_flag),
@@ -551,10 +576,9 @@ nathmda_comb <- rowwise(nathmda_flags) %>%
          
          #Medians for owner-occ purchase loans
          medincome = if_else(std_flag == 1, actualincome, NaN),
-         medloanamount = if_else(std_flag == 1, loan_amount, NaN)
-         
-         
-         ) 
+         medloanamount = if_else(std_flag == 1, loan_amount, NaN),
+         )
+
 ```
 
 ```{r producing final dataset}
@@ -596,6 +620,13 @@ final_vars <- c(
   #"wom_vlowinc","wom_lowinc","wom_modinc","wom_highinc",
   #"mixedsex_vlowinc","mixedsex_lowinc","mixedsex_modinc","mixedsex_highinc",
                 
+  
+  #Age vars
+  "older_adult_flag","middle_adult_flag","younger_adult_flag",
+  
+  #Housing unit vars
+  #To add
+  
   #Missing vars
   "missing_tract"
 )
@@ -607,7 +638,18 @@ hmda_tract <- nathmda_comb %>%
   group_by(geo2010) %>% 
   summarise(
     across(final_vars, sum, na.rm = TRUE),
-    across(c(medincome, medloanamount), median, na.rm = TRUE)) %>% 
+    across(c(medincome, medloanamount), median, na.rm = TRUE),
+    ) %>% 
+  left_join(
+    acs_housing %>%
+      mutate(
+        #Perc owner-occupied units (ACS)
+        owner_occupied_perc = housing_units_occupied_owner / housing_units_occupied_total,
+        owner_occupied_perc = if_else(housing_units_occupied_total == 0, 0, owner_occupied_perc)
+        ) %>%
+      select(GEOID, owner_occupied_perc),
+    by = c("geo2010" = "GEOID")
+    ) %>%
   rename(
     #apps_all=app_flag,
     #owner_purchases=owner_purch,
@@ -615,8 +657,7 @@ hmda_tract <- nathmda_comb %>%
     median_loan_amount = medloanamount,
     missing_geo = missing_tract) %>% 
   arrange(geo2010) 
-
-
+  
 #Final cleanup
 print(paste("Step 10: Final cleanup", Sys.time()))
 
