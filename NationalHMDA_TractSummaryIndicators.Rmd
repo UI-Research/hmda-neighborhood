@@ -5,7 +5,13 @@ date: '2022-09-14'
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(
+  echo = F,
+  include = T,
+  eval = T,
+  message = F,
+  warning = F
+)
 ```
 
 ```{r libraries}
@@ -21,7 +27,6 @@ library(arrow)
 #to_file = here("lar_parquet.parquet")
 #write_parquet(nathmda_in, sink = to_file)
 ```
-
 
 ```{r metadata}
 year = "2021"
@@ -53,44 +58,7 @@ starttime <- Sys.time()
 print(paste("Start Time", starttime))
 ```
 
-```{r nathmda colnames, eval = F}
- [1] "activity_year"                            "lei"                                      "derived_msa_md"                          
- [4] "state_code"                               "county_code"                              "census_tract"                            
- [7] "conforming_loan_limit"                    "derived_loan_product_type"                "derived_dwelling_category"               
-[10] "derived_ethnicity"                        "derived_race"                             "derived_sex"                             
-[13] "action_taken"                             "purchaser_type"                           "preapproval"                             
-[16] "loan_type"                                "loan_purpose"                             "lien_status"                             
-[19] "reverse_mortgage"                         "open_end_line_of_credit"                  "business_or_commercial_purpose"          
-[22] "loan_amount"                              "combined_loan_to_value_ratio"             "interest_rate"                           
-[25] "rate_spread"                              "hoepa_status"                             "total_loan_costs"                        
-[28] "total_points_and_fees"                    "origination_charges"                      "discount_points"                         
-[31] "lender_credits"                           "loan_term"                                "prepayment_penalty_term"                 
-[34] "intro_rate_period"                        "negative_amortization"                    "interest_only_payment"                   
-[37] "balloon_payment"                          "other_nonamortizing_features"             "property_value"                          
-[40] "construction_method"                      "occupancy_type"                           "manufactured_home_secured_property_type" 
-[43] "manufactured_home_land_property_interest" "total_units"                              "multifamily_affordable_units"            
-[46] "income"                                   "debt_to_income_ratio"                     "applicant_credit_score_type"             
-[49] "co_applicant_credit_score_type"           "applicant_ethnicity_1"                    "applicant_ethnicity_2"                   
-[52] "applicant_ethnicity_3"                    "applicant_ethnicity_4"                    "applicant_ethnicity_5"                   
-[55] "co_applicant_ethnicity_1"                 "co_applicant_ethnicity_2"                 "co_applicant_ethnicity_3"                
-[58] "co_applicant_ethnicity_4"                 "co_applicant_ethnicity_5"                 "applicant_ethnicity_observed"            
-[61] "co_applicant_ethnicity_observed"          "applicant_race_1"                         "applicant_race_2"                        
-[64] "applicant_race_3"                         "applicant_race_4"                         "applicant_race_5"                        
-[67] "co_applicant_race_1"                      "co_applicant_race_2"                      "co_applicant_race_3"                     
-[70] "co_applicant_race_4"                      "co_applicant_race_5"                      "applicant_race_observed"                 
-[73] "co_applicant_race_observed"               "applicant_sex"                            "co_applicant_sex"                        
-[76] "applicant_sex_observed"                   "co_applicant_sex_observed"                "applicant_age"                           
-[79] "co_applicant_age"                         "applicant_age_above_62"                   "co_applicant_age_above_62"               
-[82] "submission_of_application"                "initially_payable_to_institution"         "aus_1"                                   
-[85] "aus_2"                                    "aus_3"                                    "aus_4"                                   
-[88] "aus_5"                                    "denial_reason_1"                          "denial_reason_2"                         
-[91] "denial_reason_3"                          "denial_reason_4"                          "tract_population"                        
-[94] "tract_minority_population_percent"        "ffiec_msa_md_median_family_income"        "tract_to_msa_income_percentage"          
-[97] "tract_owner_occupied_units"               "tract_one_to_four_family_homes"           "tract_median_age_of_housing_units" 
-
-```
-
-```{r parquet columns}
+```{r dataset columns}
 hmda_columns = c(
   "state_code",
   "county_code",
@@ -123,8 +91,6 @@ income_limits_columns = c(
 )
 ```
 
-
-
 ```{r read data}
 # Read national file and add county code
 print(paste("Step 1: Read national file and add county code", Sys.time()))
@@ -150,7 +116,8 @@ nathmda_in <- read_parquet(rawfile, col_select = hmda_columns) %>%
       ucounty = case_when(
         ust %in% c("00","03","07","80") ~ as.character(NA), 
         TRUE ~ as.character(county_code))) %>%
-  
+    
+    # for testing purposes only
     sample_n(100000)
   
 # Read income limits file and define max limits for each county
@@ -221,7 +188,6 @@ acs_housing = read_csv(here("data-raw", "acs_5yr_2019_owner_occupied_housing.csv
 
 #write_csv(acs_housing, here("data-raw", "acs_5yr_2019_owner_occupied_housing.csv"))
 ```
-
 
 ```{r merge data}
 # Merge national file state codes
@@ -380,6 +346,9 @@ nathmda_flags <- left_join(nathmda_geo, il_in, by = "ucounty") %>%
       across(
         c(applicant_age, co_applicant_age), 
         ~ case_when(
+          ## 8888 and 9999 are not defined in the documentation
+          ## however, this document: https://www.ffiec.gov/hmda/pdf/2021Guide.pdf
+          ## specifies 8888 = Not applicable and 9999 = No co-applicant
           . %in% c("8888", "9999") ~ NA_character_, ##these aren't defined in the documentation; is 8888 not applicable (i.e., no co-applicant?)
           . %in% c("25-34", "35-44") ~ "25-44",
           . %in% c("45-54", "55-64") ~ "45-64",
@@ -387,24 +356,26 @@ nathmda_flags <- left_join(nathmda_geo, il_in, by = "ucounty") %>%
           T ~ .
         )),
       
-      older_adult_flag = case_when(
+      older_age_flag = case_when(
         applicant_age == "65+" & co_applicant_age == "65+" ~ 1,
         applicant_age == "65+" & is.na(co_applicant_age) ~ 1,
         is.na(applicant_age) & co_applicant_age == "65+" ~ 1,
         T ~ 0),
       
-      middle_adult_flag = case_when(
+      middle_age_flag = case_when(
         applicant_age %in% c("25-44", "45-64") & co_applicant_age %in% c("25-44", "45-64") ~ 1,
         applicant_age %in% c("25-44", "45-64") & is.na(co_applicant_age) ~ 1,
         is.na(applicant_age) & co_applicant_age %in% c("25-44", "45-64") ~ 1,
         T ~ 0),
       
-      younger_adult_flag = case_when(
+      younger_age_flag = case_when(
         applicant_age == "<25" & co_applicant_age == "<25" ~ 1,
         applicant_age == "<25" & is.na(co_applicant_age) ~ 1,
         is.na(applicant_age) & co_applicant_age == "<25" ~ 1,
         T ~ 0),
     
+      mixed_age_flag = if_else(!is.na(applicant_age) & !is.na(co_applicant_age) & (applicant_age != co_applicant_age), 1, 0),
+      
       #Standard flag for all neighborhood HMDA indicators
       std_flag = if_else(owner_flag == 1 & purch_flag == 1 & lien1_flag == 1 & prop1_4_flag == 1 & orig_flag == 1, 1, 0)
     ) 
@@ -574,10 +545,21 @@ nathmda_comb <- rowwise(nathmda_flags) %>%
          #mixedsex_modinc=create_var(jointsex_flag,modinc_flag,std_flag),
          #mixedsex_highinc=create_var(jointsex_flag,highinc_flag,std_flag),
          
+         ##Owner-occ purchase loans by age
+         olderage_purch = create_var(older_age_flag, std_flag),
+         middleage_purch = create_var(middle_age_flag, std_flag),
+         youngerage_purch = create_var(younger_age_flag, std_flag),
+         mixedage_purch = create_var(mixed_age_flag, std_flag),
+         
          #Medians for owner-occ purchase loans
-         medincome = if_else(std_flag == 1, actualincome, NaN),
-         medloanamount = if_else(std_flag == 1, loan_amount, NaN),
+         medincome = if_else(std_flag == 1, actualincome, NA_integer_),
+         medloanamount = if_else(std_flag == 1, loan_amount, NA_integer_),
          )
+
+skim(nathmda_flags %>% select(actualincome, loan_amount))
+skim(nathmda_comb %>% select(medincome, medloanamount))
+
+nathmda_comb %>% select(medincome, medloanamount) %>% skim
 
 ```
 
@@ -587,7 +569,7 @@ final_vars <- c(
   #Top-line vars
   #"app_flag","owner_purch", 
                 
-  #origination vars
+  #Origination vars
   "purch_orig","impr_orig","refi_orig","othpurp_orig",
   "prop1_4_orig","prop5_orig",
   "lien1_orig","lien2_orig",
@@ -620,12 +602,11 @@ final_vars <- c(
   #"wom_vlowinc","wom_lowinc","wom_modinc","wom_highinc",
   #"mixedsex_vlowinc","mixedsex_lowinc","mixedsex_modinc","mixedsex_highinc",
                 
+  #Occupancy vars
+  "investor_flag",
   
   #Age vars
-  "older_adult_flag","middle_adult_flag","younger_adult_flag",
-  
-  #Housing unit vars
-  #To add
+  "olderage_purch", "middleage_purch", "youngerage_purch", "mixedage_purch",
   
   #Missing vars
   "missing_tract"
@@ -665,6 +646,27 @@ hmda_final <- hmda_tract %>%
   mutate(invalid_geo = if_else(missing_geo > 0, 1, 0)) %>%
   select(-missing_geo)
 ```
+
+```{r data quality checks, include = F, eval = F}
+df_2018 = read_csv(here("data-final", "hmda_tract_2018.csv"))
+df_2019 = read_csv(here("data-final", "hmda_tract_2019.csv"))
+df_2020 = read_csv(here("data-final", "hmda_tract_2020.csv"))
+
+## "lein" columns were renamed to address typo; purchaser age flags were added; 
+## acs percent owner-occupied estimates were added
+colnames(hmda_final)[!(colnames(hmda_final) %in% colnames(df_2020))]
+
+skim(hmda_final)
+
+colnames(hmda_final) %>% str_detect("invest")
+
+nathmda_in %>% select(income) %>% skim
+
+## some missingness, even for geos that are correct, likely due to suppression
+hmda_final %>% filter(is.na(owner_occupied_perc)) %>% select(invalid_geo, geo2010, owner_occupied_perc)
+
+```
+
 
 ```{r exporting data}
 #Export final CSV
