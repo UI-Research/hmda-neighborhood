@@ -150,24 +150,19 @@ states_tigris <- tigris::fips_codes %>%
   select(-c(state_name, county))
 
 ## table of co/applicant age categories
-nathmda_in %>% select(matches("age")) %>% 
-  filter(! applicant_age %in% c("8888", "9999") & ! co_applicant_age %in% c("8888", "9999") ) %>%
-  janitor::tabyl(applicant_age, co_applicant_age) %>%
-  janitor::adorn_totals(c("row", "col")) %>%
-  janitor::adorn_percentages("row") %>%
-  janitor::adorn_pct_formatting(digits = 0) %>%
-  janitor::adorn_ns()
-
-## histogram of co\applicant age categoires
-nathmda_in %>%
-  select(matches("age")) %>%
-  filter(! applicant_age %in% c("8888", "9999") & ! co_applicant_age %in% c("8888", "9999") ) %>%
-  ggplot() +
-  geom_histogram(aes(applicant_age, fill = "blue"), alpha = .5, stat = "count") +
-  geom_histogram(aes(co_applicant_age, fill = "orange"), alpha = .5, stat = "count")
+# nathmda_in %>% select(matches("age")) %>% 
+#  filter(! applicant_age %in% c("8888", "9999") & ! co_applicant_age %in% c("8888", "9999") ) %>%
+#  janitor::tabyl(applicant_age, co_applicant_age) %>%
+#  janitor::adorn_totals(c("row", "col")) %>%
+#  janitor::adorn_percentages("row") %>%
+#  janitor::adorn_pct_formatting(digits = 0) %>%
+#  janitor::adorn_ns()
 ```
 
 ```{r acs housing variables}
+## note - 2021 hmda data use 2010 census tract definitions, per this source:
+## consumerfinance.gov/data-research/hmda/summary-of-201-data-on-mortgage-lending
+
 acs_housing = read_csv(here("data-raw", "acs_5yr_2019_owner_occupied_housing.csv"))
 
 #acs_vars = c(
@@ -388,37 +383,33 @@ nathmda_flags <- left_join(nathmda_geo, il_in, by = "ucounty") %>%
     ) 
 
 #Check frequencies of new race categories
-print(paste("Step 7: Check frequencies of new race categories", Sys.time()))
+print(paste("Step 7: Check frequencies of new age categories", Sys.time()))
 
-table(nathmda_flags$newrace_app)
-table(nathmda_flags$newrace_coapp)
-table(nathmda_flags$hhrace)
-table(nathmda_flags$race_avail)
+#nathmda_flags %>% 
+#  select(matches("age")) %>%
+#  skim
 
+#nathmda_flags %>%
+#  select(matches("age")) %>%
+#  table %>%
+#  prop.table %>%
+#  round(digits = 2)
 
-
-
-nathmda_flags %>% 
-  select(matches("age")) %>%
-  skim
-
-nathmda_flags %>%
-  select(matches("age")) %>%
-  table %>%
-  prop.table %>%
-  round(digits = 2)
-
-nathmda_in %>% 
-  select(matches("age")) %>%
-  mutate(across(everything(), ~ if_else(. %in% c("8888", "9999"), NA_character_, .))) %>%
-  table %>%
-  prop.table %>%
-  round(digits = 2)
+#nathmda_in %>% 
+#  select(matches("age")) %>%
+#  mutate(across(everything(), ~ if_else(. %in% c("8888", "9999"), NA_character_, .))) %>%
+#  table %>%
+#  prop.table %>%
+#  round(digits = 2)
 
 
 ```
 
 ```{r developing final indicators}
+rm(nathmda_geo)
+rm(nathmda_in)
+rm(nathmda_states)
+
 # This function creates final variables by taking any flag variables that are input
 # and checking that all conditions are equal to one
 create_var <- function(...){
@@ -429,7 +420,7 @@ create_var <- function(...){
 print(paste("Step 8: Create all combined indicators", Sys.time()))
 
 nathmda_comb <- nathmda_flags %>%
-  rowwise %>%
+  #rowwise %>%
   mutate(#Top-line indicators
          owner_purch = create_var(std_flag),
          
@@ -566,10 +557,12 @@ nathmda_comb <- nathmda_flags %>%
 # Create all combined indicators
 print(paste("Step 9: Created all combined indicators", Sys.time()))
 
-nathmda_comb %>% select(std_flag, matches("age"))
+#nathmda_comb %>% select(std_flag, matches("age"))
 ```
 
 ```{r producing final dataset}
+rm(nathmda_flags)
+
 #List of sum variables to include in the final file
 final_vars <- c(
   #Top-line vars
