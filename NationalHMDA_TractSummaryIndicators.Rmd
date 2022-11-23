@@ -31,6 +31,10 @@ library(arrow)
 #write_csv(here("data-raw", "lar_subsetted_columns_2021.csv"))
 ```
 
+Notes for Rob: 
+- the "rawfile" object is a file path to a local (within-repo) .parquet file -- this needs to be adjusted to the Stata-2 F: drive file path of the same object
+- other options we discussed: pipe-chaining together much of this script to eliminate unneeded intermediate objects, and transferring the .Rmd code to a .R file
+
 ```{r metadata}
 year = "2021"
 
