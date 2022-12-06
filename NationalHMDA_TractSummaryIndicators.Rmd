@@ -122,7 +122,7 @@ nathmda_in <- read_parquet(file = rawfile, col_select = hmda_columns) %>%
         TRUE ~ as.character(county_code))) %>% 
     
     # for testing purposes only
-     sample_n(100000)
+    # sample_n(100000)
   
 # Read income limits file and define max limits for each county
 print(paste("Step 2: Read income limits file and define max limits for each county", Sys.time()))
@@ -422,7 +422,7 @@ create_var <- function(...){
 # Create all combined indicators
 print(paste("Step 8: Create all combined indicators", Sys.time()))
 
-nathmda_comb <- nathmda_flags %>%
+nathmda_comb1 <- nathmda_flags %>%
   rowwise %>%
   mutate(#Top-line indicators
          owner_purch = create_var(std_flag),
@@ -465,7 +465,12 @@ nathmda_comb <- nathmda_flags %>%
          ajpn_purch = create_var(ajpn_flag, std_flag),
          akor_purch = create_var(akor_flag, std_flag),
          avie_purch = create_var(avie_flag, std_flag),
-         
+  ) %>%
+  ungroup()
+
+nathmda_comb <- nathmda_comb1 %>%
+  rowwise %>%
+  mutate(        
          #Owner-occ purchase loans by income
          vlowinc_purch = create_var(vlowinc_flag, std_flag),
          lowinc_purch = create_var(lowinc_flag, std_flag),
