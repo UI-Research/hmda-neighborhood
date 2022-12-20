@@ -110,10 +110,10 @@ nathmda_in <- read_parquet(file = rawfile, col_select = hmda_columns) %>%
       #Create ucounty from the county_code var if the state part is valid; 00, 03, 07 and 80 are not state FIPS codes
       ucounty = case_when(
         ust %in% c("00","03","07","80") ~ as.character(NA), 
-        TRUE ~ as.character(county_code))) %>% 
+        TRUE ~ as.character(county_code))) #%>% 
     
     # for testing purposes only, select a random sample of rows
-     sample_n(100000)
+    # sample_n(100000)
 
   
 # Read income limits file and define max limits for each county
@@ -169,7 +169,8 @@ if (file.exists(acs_file_path)) {
     "B25003_002" #owner-occupied units
   )
   
-  #Year to pull Census data
+  #Year to pull Census data -- using pre-2020 data so that tract geometries align with
+  #the tract geometries used for the raw HMDA data
   census_year = 2019
   
   #Map over all states and return 5-year ACS data for the year and variables
@@ -189,9 +190,6 @@ if (file.exists(acs_file_path)) {
   #Write the data to the local path so that it's not neccesarry to query the API in the future
   write_csv(acs_housing, here("data-raw", "acs_5yr_2019_owner_occupied_housing.csv"))
   }
-
-nathmda_geo %>% distinct(loan_type)
-il_in
 ```
 
 ```{r merge data}
@@ -206,8 +204,15 @@ print(paste("Step 5: Merge national file and counties, flag and create dummy cod
 
 nathmda_geo <- nathmda_states %>%
   mutate(
+    # Derive ucounty from census_tract when the first is missing and the second is not
+    ucounty = case_when(
+      is.na(ucounty) & !is.na(census_tract) & (str_sub(as.character(census_tract), 1, 5) %in% states_tigris$ucounty) ~ str_sub(as.character(census_tract), 1, 5),
+      T ~ ucounty
+    ),
+    
     #Create flag variables for when the tract or county codes are missing
     missing_tract = case_when(is.na(census_tract) ~ 1, TRUE ~ 0), 
+
     missing_county = case_when(is.na(ucounty) ~ 1, TRUE ~ 0),
     geo2010 = case_when(
       #If Census tract is valid then geo2010 is the input census tract
@@ -225,21 +230,18 @@ nathmda_geo <- nathmda_states %>%
 # Merge income limit data and create characteristic flags
 print(paste("Step 6: Merge income limit data and create characteristic flags", Sys.time()))
 
-#Note: "_avail"-suffixed variables are used for quality control
-nathmda_flags %>% select(income_high_flag, income, income)
-
-
 nathmda_flags <- left_join(nathmda_geo, il_in, by = "ucounty") %>%
     mutate(
-      income = income * 1000,
+      income = income * 1000, #converting to thousands to align with denomination of income limits
       
       #Income flags
-      income_missing_flag = case_when(is.na(income) ~ 1, TRUE ~ 0), #Note - this is just the inverse of the income_avail flag...?
+      # flagging income as missing when ucounty is missing because ucounty is the join key for the income limits; income values may still be present in these cases
+      income_missing_flag = if_else(is.na(income) | is.na(ucounty), 1, 0), 
       income_verylow_flag = if_else(income <= income_limit_very_low, 1, 0),
       income_low_flag = if_else(income <= income_limit_low & income > income_limit_very_low, 1, 0),
       income_moderate_flag = if_else(income <= income_limit_moderate & income > income_limit_low, 1, 0),
       income_high_flag = if_else(income > income_limit_moderate, 1, 0), ## this is the old code, which looks incorrect: if_else(moderate <= income, 1, 0),
-      income_available = if_else(!is.na(income), 1, 1, 0), #Note - this is just the inverse of the missing_income flag...?
+      income_available = if_else(income_missing_flag == 0, 1, 0), #Note - this is just the inverse of the income_missing_flag
           
       #Loan type flags
       type_conventional_flag = if_else(loan_type == 1,1,0),
@@ -324,7 +326,7 @@ nathmda_flags <- left_join(nathmda_geo, il_in, by = "ucounty") %>%
       race_missing_flag = if_else(hhrace == 'Race Not Available', 1, 0),
           
       #Flag for combined Asian/NHPI race
-      race_asian_or_nhpi_flag = if_else(hhrace %in% c('Native Hawaiian or Other Pacific Islander','Asian'), 1, 0),
+      race_asian_or_nhpi_flag = if_else(hhrace %in% c('Native Hawaiian or Other Pacific Islander', 'Asian'), 1, 0),
       
       #Race is available denominator
       race_available = if_else(hhrace != 'Race Not Available', 1, 0),
@@ -343,8 +345,7 @@ nathmda_flags <- left_join(nathmda_geo, il_in, by = "ucounty") %>%
         race_white_flag == 0 &
         race_black_flag == 0 &
         race_hispanic_flag == 0 &
-        race_nhpi_flag == 0 &
-        race_asian_flag == 0 &
+        race_asian_or_nhpi_flag == 0 &
         race_aian_flag == 0 &
         race_multiple_flag == 0 &
         race_mixed_flag == 0,
@@ -412,26 +413,12 @@ nathmda_flags <- left_join(nathmda_geo, il_in, by = "ucounty") %>%
       #Standard flag indicating when a record is for the purchase of a principal residence on a first lien of a 1-4 unit residential building with an originated loan 
       standard_flag = if_else(occupancy_principal_flag == 1 & purpose_purchase_flag == 1 & lien_firstlien_flag == 1 & units_1_4_flag == 1 & outcome_originated_flag == 1, 1, 0)
     ) 
-
-#Check frequencies of new age categories
-print(paste("Step 7: Check frequencies of new age categories", Sys.time()))
-
-nathmda_flags %>% 
-  select(matches("age")) %>%
-  skim
-
-nathmda_in %>% 
-  select(matches("age")) %>%
-  mutate(across(everything(), ~ if_else(. %in% c("8888", "9999"), NA_character_, .))) %>%
-  table %>%
-  prop.table %>%
-  round(digits = 2)
 ```
 
 ```{r developing final indicators}
-#rm(nathmda_geo)
-#rm(nathmda_in)
-#rm(nathmda_states)
+rm(nathmda_geo)
+rm(nathmda_in)
+rm(nathmda_states)
 
 # This function creates final variables by taking any flag variables that are input
 # and checking that all conditions are equal to one
@@ -440,13 +427,13 @@ create_var <- function(...){
 }
 
 # Create all combined indicators
-print(paste("Step 8: Create all combined indicators", Sys.time()))
-
+print(paste("Step 7: Create all combined indicators", Sys.time()))
 
 nathmda_comb1 <- nathmda_flags %>%
   rowwise %>%
-  mutate(#Top-line indicators
-         owner_purchase = create_var(standard_flag), ## isn't this just the same as "standard_flag"?
+  mutate(
+        #Top-line indicators
+         #owner_purchase = create_var(standard_flag), ## this is the same as "standard_flag"
          
          #Occupancy - investment
          occupancy_investment_origination = create_var(occupancy_investment_flag, outcome_originated_flag),
@@ -475,7 +462,7 @@ nathmda_comb1 <- nathmda_flags %>%
          #sex_income_avail = create_var(sex_avail, income_avail, standard_flag),
          age_available = create_var(age_available, standard_flag),
          
-         #Owner-occ purchasease loans by race
+         #Owner-occ purchase loans by race
          race_white_purchase = create_var(race_white_flag, standard_flag),
          race_black_purchase = create_var(race_black_flag, standard_flag),
          race_hispanic_purchase = create_var(race_hispanic_flag, standard_flag),
@@ -489,7 +476,7 @@ nathmda_comb1 <- nathmda_flags %>%
   
          race_asian_or_nhpi_purchase = create_var(race_asian_or_nhpi_flag, standard_flag),
          
-         #Owner-occ purchasease loans by specific race 
+         #Owner-occ purchase loans by specific race 
          race_asian_indian_purchase = create_var(race_asian_indian_flag, standard_flag),
          race_asian_chinese_purchase = create_var(race_asian_chinese_flag, standard_flag),
          race_asian_filipino_purchase = create_var(race_asian_filipino_flag, standard_flag),
@@ -533,7 +520,19 @@ nathmda_comb <- nathmda_comb1 %>%
          race_aian_income_moderate = create_var(race_aian_flag, income_moderate_flag, standard_flag),
          race_aian_income_high = create_var(race_aian_flag, income_high_flag, standard_flag),
          
-         #Owner-occ purchase loans to API borrowers by income
+         #Owner-occ purchase loans to asian borrowers by income
+         #race_asian_income_verylow = create_var(race_asian_flag, income_verylow_flag, standard_flag),
+         #race_asian_income_low = create_var(race_asian_flag, income_low_flag, standard_flag),
+         #race_asian_income_moderate = create_var(race_asian_flag, income_moderate_flag, standard_flag),
+         #race_asian_income_high = create_var(race_asian_flag, income_high_flag, standard_flag),
+         
+         #Owner-occ purchase loans to native hawaiian or pacific islander borrowers by income
+         #race_nhpi_income_verylow = create_var(race_nhpi_flag, income_verylow_flag, standard_flag),
+         #race_nhpi_income_low = create_var(race_nhpi_flag, income_low_flag, standard_flag),
+         #race_nhpi_income_moderate = create_var(race_nhpi_flag, income_moderate_flag, standard_flag),
+         #race_nhpi_income_high = create_var(race_nhpi_flag, income_high_flag, standard_flag),
+         
+         #Owner-occ purchase loans to asian, native hawaiian, or pacific islander borrowers by income
          race_asian_or_nhpi_income_verylow = create_var(race_asian_or_nhpi_flag, income_verylow_flag, standard_flag),
          race_asian_or_nhpi_income_low = create_var(race_asian_or_nhpi_flag, income_low_flag, standard_flag),
          race_asian_or_nhpi_income_moderate = create_var(race_asian_or_nhpi_flag, income_moderate_flag, standard_flag),
@@ -601,20 +600,15 @@ nathmda_comb <- nathmda_comb1 %>%
   ungroup()
 
 # Create all combined indicators
-print(paste("Step 9: Created all combined indicators", Sys.time() ))
-
-
+print(paste("Step 8: Created all combined indicators", Sys.time() ))
 ```
 
 ```{r producing final dataset}
-#rm(nathmda_flags)
+rm(nathmda_flags)
 
 #List of sum variables to include in the final file
 final_vars <- c(
-  #Top-line vars
-  #"app_flag","owner_purchase", 
-                
-  #origination vars
+  #Origination vars
   "purpose_purchase_origination","purpose_improvement_origination","purpose_refinance_origination","purpose_other_origination",
   "units_1_4_origination","units_5ormore_origination",
   "lien_firstlien_origination","lien_subordinatelien_origination",
@@ -622,14 +616,13 @@ final_vars <- c(
   #Investment vars
   "occupancy_investment_origination", "occupancy_investment_units_1_4", "occupancy_investment_units_5ormore",
   
-                
   #Denominator vars
   "income_available","race_available","race_income_available","age_available",
                 
   #Race/ethnicity vars
-  "race_white_purchase","race_black_purchase","race_hispanic_purchase","race_asian_or_nhpi_purchase","race_multiple_purchase","race_missing_purchase","race_other_purchase", "race_mixed_purchase",
-  "race_aian_purchase","race_asian_indian_purchase","race_asian_chinese_purchase","race_asian_filipino_purchase","race_asian_japanese_purchase","race_asian_korean_purchase",
-  "race_asian_vietnamese_purchase",
+  "race_white_purchase", "race_black_purchase", "race_hispanic_purchase", "race_asian_purchase", "race_nhpi_purchase", "race_asian_or_nhpi_purchase","race_multiple_purchase",
+  "race_missing_purchase","race_other_purchase", "race_mixed_purchase","race_aian_purchase","race_asian_indian_purchase","race_asian_chinese_purchase",
+  "race_asian_filipino_purchase","race_asian_japanese_purchase","race_asian_korean_purchase","race_asian_vietnamese_purchase",
                 
   #Income vars
   "income_verylow_purchase","income_low_purchase","income_moderate_purchase","income_high_purchase",
@@ -687,128 +680,31 @@ print(paste("Step 10: Final cleanup", Sys.time()))
 hmda_final <- hmda_tract %>%
   mutate(invalid_geo = if_else(missing_geo > 0, 1, 0)) %>%
   select(-missing_geo)
-
-hmda_final %>% skim
-hmda_final %>% 
-  select(matches("avail")) %>%
-  summarise(across(everything(), ~ sum(.x, na.rm = T)))
-
-hmda_final %>% 
-  summarise(across(is.numeric, ~ sum(.x, na.rm = T))) %>%
-  mutate(
-    income_check = 
-      income_verylow_purch +
-      income_low_purch +
-      income_moderate_purch +
-      income_high_purch
-  ) %>% 
-  select(income_check, income_avail)
-
-  hmda_final %>% 
-  summarise(across(is.numeric, ~ sum(.x, na.rm = T))) %>%
-  mutate(
-    race_check = 
-      white_purch + 
-      black_purch +
-      hisp_purch +
-      api_purch +
-      race_multiple_purch +
-      race_mixed_purch +
-      #race_missing_purch + 
-      race_other_purch 
-      #aian_purch +
-      #aind_purch + 
-      #achi_purch +
-      #afil_purch +
-      #ajpn_purch +
-      #akor_purch +
-      #avie_purch
-  ) %>%
-    
-  select(race_avail, white_purch, black_purch, hisp_purch, api_purch, race_multiple_purch, race_mixed_purch, race_other_purch, race_check)
-
-
-  hmda_final
-  
-hmda_final %>%
-  select(race_avail, matches("purch")) %>%
-  filter(race_avail == 1)
-         white_purch = create_var(race_white_flag, standard_flag),
-         black_purch = create_var(race_black_flag, standard_flag),
-         hisp_purch = create_var(race_hispanic_flag, standard_flag),
-         api_purch = create_var(api_flag, standard_flag),
-         ais_purch = create_var(ais_flag, standard_flag),
-         nhpi_purch = create_var(nhpi_flag, standard_flag),
-         aian_purch = create_var(aian_flag, standard_flag),
-         race_multiple_purch = create_var(race_multiple_flag, standard_flag),
-         race_missing_purch = create_var(race_missing_flag, standard_flag),
-         race_other_purch = create_var(race_other_flag, standard_flag),
-  summarise(
-    across(matches("avail"), ~ sum(.x, na.rm = T)),
-    across(matches("age"))
-  )
-
-hmda_final %>%
-  select(matches("inc")) %>%
-  summarise(across(everything(), ~ sum(.x, na.rm = T))) %>%
-  mutate(
-    income_check_all = income_verylow_purch + income_low_purch + income_moderate_purch + income_high_purch, 
-    income_check_white = rowSums(across(matches("white")))
-  ) %>%
-  select(income_avail, income_check_all, income_check_white)
-
-hmda_final %>%
-  select(race_avail, white_purch, black_purch, hisp_purch, api_purch, race_multiple_purch, race_mixed_purch, race_other_purch) %>%
-  filter(race_avail > (white_purch + black_purch + hisp_purch + api_purch + race_multiple_purch + race_mixed_purch))
 ```
 
-```{r data quality checks, include = F, eval = F}
-df_2018 = read_csv(here("data-final", "hmda_tract_2018.csv"))
-df_2019 = read_csv(here("data-final", "hmda_tract_2019.csv"))
-df_2020 = read_csv(here("data-final", "hmda_tract_2020.csv"))
-df_2021 = read_csv(here("data-final", "hmda_tract_2021.csv"))
 
-## "lein" columns were renamed to address typo; purchaser age flags were added; 
-## acs percent owner-occupied estimates were added
-colnames(hmda_final)[!(colnames(hmda_final) %in% colnames(df_2020))]
-
-df_2021 %>% 
-  select(matches("age")) %>%
-  skim %>%
-  write_csv(file = here("summary_statistics_2021_age_variables.csv"))
-
-df_2021 %>% 
-  select(matches("age")) %>%
-  summarise(
-    across(everything(),
-    ~ sum(.x, na.rm = T)
-  )) %>%
-  mutate(total = sum(olderage_purch, middleyounger_age_purch, middleolder_age_purch, youngerage_purch, mixedage_purch))
-
-## total age_purch values: 4,552,165
-
-nrow(nathmda_in) # ~26 million
-options(scipen = 999999)
-df_2021 %>% skim
-
-## some missingness, even for geos that are correct, likely due to suppression
-df_2021 %>% filter(is.na(owner_occupied_perc)) %>% select(invalid_geo, geo2010, owner_occupied_perc)
-
-nathmda_in %>% 
-  select(matches("age")) %>%
-  mutate(across(everything(), ~ if_else(. %in% c("8888", "9999"), NA_character_, .))) %>%
-  table %>%
-  prop.table %>%
-  round(digits = 2)
-
-## table of co/applicant age categories
-# nathmda_in %>% select(matches("age")) %>% 
-#  filter(! applicant_age %in% c("8888", "9999") & ! co_applicant_age %in% c("8888", "9999") ) %>%
-#  janitor::tabyl(applicant_age, co_applicant_age) %>%
-#  janitor::adorn_totals(c("row", "col")) %>%
-#  janitor::adorn_percentages("row") %>%
-#  janitor::adorn_pct_formatting(digits = 0) %>%
-#  janitor::adorn_ns()
+```{r quality control}
+## this should return a dataframe with no rows
+hmda_final %>%
+  mutate(
+    age_check = rowSums(across(c(matches("age"), -matches("available"))), na.rm = T), 
+    income_check = rowSums(across(c(matches("income"), -matches("race|median|available")))),
+    race_check = rowSums(across(
+      c(race_white_purchase, race_black_purchase, race_hispanic_purchase, race_asian_or_nhpi_purchase, 
+        race_multiple_purchase, race_mixed_purchase, race_other_purchase, race_aian_purchase)), na.rm = T),
+    race_income_check = rowSums(across(c(matches("race.*income"), -matches("available|missing"))), na.rm = T),
+    tract_id_characters = nchar(geo2010),
+    errors = case_when(
+      age_check != age_available ~ "age check failed",
+      income_check != income_available ~ "income check failed",
+      race_check != race_available ~ "race check failed",
+      race_income_check != race_income_available ~ "race-income check failed",
+      tract_id_characters != 11 ~ "invalid tract id",
+      T ~ NA_character_
+    )
+  ) %>%
+  filter(!is.na(errors)) %>%
+  select(errors, tract_id_characters, income_available, income_check,  matches("income"), -matches("race"), geo2010)
 ```
 
 ```{r exporting data}
