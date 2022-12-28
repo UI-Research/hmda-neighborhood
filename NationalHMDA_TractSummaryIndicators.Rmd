@@ -21,26 +21,6 @@ library(skimr)
 library(arrow)
 ```
 
-```{r converting the data to .parquet, eval = F}
-#Location of raw HMDA data (1.49 GB zipped):
-#https://s3.amazonaws.com/cfpb-hmda-public/prod/dynamic-data/2021/2021_lar.zip 
-
-#Manually download this onto your local machine, then convert it to a .parquet file
-#thereby cutting the file size to approximately 1.1 GB. Optionally, select relevant columns
-#and only write these columns out to the .parquet file.
-
-#read in full .txt file
-#lar = here("2021_lar", "2021_lar.txt")
-#nathmda_in <- read_delim(lar, delim = "|")
-
-#write out as .parquet file
-#to_file = here("lar_parquet.parquet")
-#write_parquet(nathmda_in, sink = to_file)
-
-#Then, copy this file from your local machine to a folder on the F: drive on 
-#Stata 2, or to another virtual desktop with good processing capacity
-```
-
 ```{r metadata}
 #Update this value to the appropriate year
 year = "2021"
@@ -437,9 +417,6 @@ print(paste("Step 7: Create all combined indicators", Sys.time()))
 nathmda_comb1 <- nathmda_flags %>%
   rowwise %>%
   mutate(
-        #Top-line indicators
-         #owner_purchase = create_var(standard_flag), ## this is the same as "standard_flag"
-         
          #Occupancy - investment
          occupancy_investment_origination = create_var(occupancy_investment_flag, outcome_originated_flag),
          
