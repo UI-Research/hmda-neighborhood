@@ -42,6 +42,7 @@ library(arrow)
 ```
 
 ```{r metadata}
+#Update this value to the appropriate year
 year = "2021"
 
 #Relative path to the raw HMDA dataset (.parquet) - ~1.1 GB:
@@ -616,20 +617,20 @@ final_vars <- c(
   "standard_flag", #owner-occupied, first-lien home purchases of 1-4 unit dwellings
   
   #Origination vars
-  "purpose_purchase_origination","purpose_improvement_origination","purpose_refinance_origination","purpose_other_origination",
-  "units_1_4_origination","units_5ormore_origination",
-  "lien_firstlien_origination","lien_subordinatelien_origination",
+  "purpose_purchase_origination", "purpose_improvement_origination", "purpose_refinance_origination", "purpose_other_origination",
+  "units_1_4_origination", "units_5ormore_origination",
+  "lien_firstlien_origination", "lien_subordinatelien_origination",
   
   #Investment vars
   "occupancy_investment_origination", "occupancy_investment_units_1_4", "occupancy_investment_units_5ormore",
   
   #Denominator vars
-  "income_available","race_available","race_income_available","age_available",
+  "income_available", "race_available", "race_income_available", "age_available",
                 
   #Race/ethnicity vars
-  "race_white_purchase", "race_black_purchase", "race_hispanic_purchase", "race_asian_purchase", "race_nhpi_purchase", "race_asian_or_nhpi_purchase","race_multiple_purchase",
-  "race_missing_purchase","race_other_purchase", "race_mixed_purchase","race_aian_purchase","race_asian_indian_purchase","race_asian_chinese_purchase",
-  "race_asian_filipino_purchase","race_asian_japanese_purchase","race_asian_korean_purchase","race_asian_vietnamese_purchase",
+  "race_white_purchase", "race_black_purchase", "race_hispanic_purchase", "race_asian_purchase", "race_nhpi_purchase", "race_asian_or_nhpi_purchase", "race_multiple_purchase",
+  "race_missing_purchase", "race_other_purchase", "race_mixed_purchase", "race_aian_purchase", "race_asian_indian_purchase", "race_asian_chinese_purchase",
+  "race_asian_filipino_purchase", "race_asian_japanese_purchase", "race_asian_korean_purchase", "race_asian_vietnamese_purchase",
                 
   #Income vars
   "income_verylow_purchase","income_low_purchase","income_moderate_purchase","income_high_purchase",
@@ -670,6 +671,7 @@ hmda_tract <- nathmda_comb %>%
     across(matches("median"), median, na.rm = TRUE),
     ) %>% 
   left_join(
+    ## joining ACS variables to the HMDA data
     acs_housing %>%
       mutate(
         #Percent owner-occupied units (ACS)
