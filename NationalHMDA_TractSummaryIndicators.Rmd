@@ -49,6 +49,9 @@ rawfile <- here("data-raw", "lar_parquet_2021.parquet")
 
 #Location of income limit data (csv): 
 ilfile <- here("data-raw", "income-limits", "Section8-FY21.csv")
+
+#Path to write final dataset
+outfile = here("data-final", paste0("hmda_tract_", year, ".csv"))
 ```
 
 ```{r read data, cache = F}
@@ -114,7 +117,7 @@ nathmda_in <- read_parquet(file = rawfile, col_select = hmda_columns) %>%
         TRUE ~ as.character(county_code))) #%>% 
     
     # for testing purposes only, select a random sample of rows
-    # sample_n(100000)
+    # sample_n(1000)
 
   
 # Read income limits file and define max limits for each county
@@ -609,6 +612,9 @@ rm(nathmda_flags)
 
 #List of sum variables to include in the final file
 final_vars <- c(
+  #Standard flag
+  "standard_flag", #owner-occupied, first-lien home purchases of 1-4 unit dwellings
+  
   #Origination vars
   "purpose_purchase_origination","purpose_improvement_origination","purpose_refinance_origination","purpose_other_origination",
   "units_1_4_origination","units_5ormore_origination",
@@ -687,17 +693,20 @@ hmda_final <- hmda_tract %>%
   select(-missing_geo)
 ```
 
-
 ```{r quality control}
 ## this should return a dataframe with no rows
-hmda_final %>%
+all_checks_passed = hmda_final %>%
   mutate(
+    # creating variables reflecting the sum across each component variable within
+    # each domain (age, income, race, race_income). these "check" variables should equal
+    # the corresponding [domain]_available variable.
     age_check = rowSums(across(c(matches("age"), -matches("available"))), na.rm = T), 
     income_check = rowSums(across(c(matches("income"), -matches("race|median|available")))),
     race_check = rowSums(across(
       c(race_white_purchase, race_black_purchase, race_hispanic_purchase, race_asian_or_nhpi_purchase, 
         race_multiple_purchase, race_mixed_purchase, race_other_purchase, race_aian_purchase)), na.rm = T),
     race_income_check = rowSums(across(c(matches("race.*income"), -matches("available|missing"))), na.rm = T),
+    # all tract IDs should be 11 characters
     tract_id_characters = nchar(geo2010),
     errors = case_when(
       age_check != age_available ~ "age check failed",
@@ -710,6 +719,17 @@ hmda_final %>%
   ) %>%
   filter(!is.na(errors)) %>%
   select(errors, tract_id_characters, income_available, income_check,  matches("income"), -matches("race"), geo2010)
+
+codebook = readxl::read_xlsx(here("Urban-HMDA_neighborhood_data_codebook.xlsx"), sheet = 2)
+
+## check to ensure that there aren't any variables in the codebook
+## that aren't in the final dataset. this should return a dataframe with no rows.
+codebook %>%
+  filter(!(`Name - 2021` %in% (colnames(hmda_final))))
+
+## check to ensure there aren't any columns in the codebook
+## that aren't in the final dataset. this should return an empty character vector.
+colnames(hmda_final)[!(colnames(hmda_final) %in% codebook$`Name - 2021`)]
 ```
 
 ```{r exporting data}
