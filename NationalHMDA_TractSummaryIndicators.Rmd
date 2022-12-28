@@ -91,17 +91,18 @@ hmda_columns = c(
   )
 
 #Reading the HMDA parquet file
+#Only reading in the needed columns to limit file size
 nathmda_in <- read_parquet(file = rawfile, col_select = hmda_columns) %>%
     mutate(
       
       #If the census tract is coded as "na" then switch to proper missing
       census_tract = case_when(
-        census_tract == "na" ~ as.character(NA), 
+        census_tract %in% c("na", "nA") ~ as.character(NA), 
         TRUE ~ as.character(census_tract)),
       
       #If the county is coded as "na" or "99999" then switch to proper missing
       county_code = case_when(
-        county_code %in% c("na","N/AN/","99999") ~ as.character(NA), 
+        county_code %in% c("na","N/AN/", "nA", "99999") ~ as.character(NA), 
         TRUE ~ as.character(county_code)),
       
       #Check the state part of the county code
@@ -668,7 +669,11 @@ hmda_tract <- nathmda_comb %>%
         #Percent owner-occupied units (ACS)
         occupancy_owneroccupied_percent = (housing_units_occupied_owner / housing_units_occupied_total) %>% round(digits = 2)
         ) %>%
-      select(GEOID, occupancy_owneroccupied_percent),
+      select(
+        GEOID, 
+        occupancy_unitsoccupied_count = housing_units_occupied_total,
+        occupancy_owneroccupied_count = housing_units_occupied_owner,
+        occupancy_owneroccupied_percent),
     by = c("geo2010" = "GEOID")
     ) %>%
   rename(missing_geo = missing_tract) %>% 
