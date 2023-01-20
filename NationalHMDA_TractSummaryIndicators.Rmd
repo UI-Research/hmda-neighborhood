@@ -95,10 +95,10 @@ nathmda_in <- read_parquet(file = rawfile, col_select = hmda_columns) %>%
       #Create ucounty from the county_code var if the state part is valid; 00, 03, 07 and 80 are not state FIPS codes
       ucounty = case_when(
         ust %in% c("00","03","07","80") ~ as.character(NA), 
-        TRUE ~ as.character(county_code))) #%>% 
+        TRUE ~ as.character(county_code))) %>% 
     
     # for testing purposes only, select a random sample of rows
-    # sample_n(1000)
+    sample_n(1000)
 
   
 # Read income limits file and define max limits for each county
@@ -283,8 +283,8 @@ nathmda_flags <- left_join(nathmda_geo, il_in, by = "ucounty") %>%
         co_applicant_race_1 == 1 ~ "American Indian or Alaskan Native",
         TRUE ~ "NA"),
           
-      #If there is a co-applicant flag if the co-applicant race is different from the applicant race
-      hhrace_mixed_flag = if_else(newrace_coapp != "No co-applicant" & newrace_app != "Race Not Available" & newrace_coapp != "Race Not Available" & (newrace_app!=newrace_coapp),1,0),
+      #If there is a co-applicant, and neither the applicant's nor co-applicant's race is "Race Not Available", and the co-applicant's race is different from the applicant's race
+      hhrace_mixed_flag = if_else(newrace_coapp != "No co-applicant" & newrace_app != "Race Not Available" & newrace_coapp != "Race Not Available" & (newrace_app!=newrace_coapp), 1, 0),
 
       #Calculate a household race from the applicant and co-applicant race
       hhrace = case_when(
@@ -418,23 +418,25 @@ nathmda_comb1 <- nathmda_flags %>%
   rowwise %>%
   mutate(
          #Occupancy - investment
-         occupancy_investment_origination = create_var(occupancy_investment_flag, outcome_originated_flag),
+         occupancy_investment_origination = create_var(occupancy_investment_flag, lien_firstlien_flag, outcome_originated_flag),
          
          #Occupancy - investment by unit size
-         occupancy_investment_units_1_4 = create_var(occupancy_investment_flag, outcome_originated_flag, units_1_4_flag),
-         occupancy_investment_units_5ormore = create_var(occupancy_investment_flag, outcome_originated_flag, units_5ormore_flag),
+         occupancy_investment_units_1_4 = create_var(occupancy_investment_flag, outcome_originated_flag, lien_firstlien_flag, units_1_4_flag),
+         occupancy_investment_units_5ormore = create_var(occupancy_investment_flag, outcome_originated_flag, lien_firstlien_flag, units_5ormore_flag),
          
          #Originations by loan type
-         purpose_purchase_origination = create_var(purpose_purchase_flag, outcome_originated_flag),
-         purpose_improvement_origination = create_var(purpose_improvement_flag, outcome_originated_flag),
-         purpose_refinance_origination = create_var(purpose_refinance_flag, outcome_originated_flag),
-         purpose_other_origination = create_var(purpose_other_flag, outcome_originated_flag),
+         #purpose_purchase_origination = create_var(purpose_purchase_flag, outcome_originated_flag),
+         #purpose_improvement_origination = create_var(purpose_improvement_flag, outcome_originated_flag),
+         #purpose_refinance_origination = create_var(purpose_refinance_flag, outcome_originated_flag),
+         #purpose_other_origination = create_var(purpose_other_flag, outcome_originated_flag),
          
-         units_1_4_origination = create_var(units_1_4_flag, outcome_originated_flag),
-         units_5ormore_origination = create_var(units_5ormore_flag, outcome_originated_flag),
+         #Originations by unit count
+         #units_1_4_origination = create_var(units_1_4_flag, outcome_originated_flag),
+         #units_5ormore_origination = create_var(units_5ormore_flag, outcome_originated_flag),
          
-         lien_firstlien_origination = create_var(lien_firstlien_flag, outcome_originated_flag),
-         lien_subordinatelien_origination = create_var(lien_subordinatelien_flag, outcome_originated_flag),
+         #Originations by lien type
+         #lien_firstlien_origination = create_var(lien_firstlien_flag, outcome_originated_flag),
+         #lien_subordinatelien_origination = create_var(lien_subordinatelien_flag, outcome_originated_flag),
          
          #Denominators
          income_available = create_var(income_available, standard_flag),
@@ -521,16 +523,16 @@ nathmda_comb <- nathmda_comb1 %>%
          race_asian_or_nhpi_income_high = create_var(race_asian_or_nhpi_flag, income_high_flag, standard_flag),
          
          #Owner-occ purchase loans to multiple race/ethnicity borrowers by income
-         race_multiple_income_verylow=create_var(race_multiple_flag, income_verylow_flag, standard_flag),
-         race_multiple_income_low=create_var(race_multiple_flag, income_low_flag, standard_flag),
-         race_multiple_income_moderate=create_var(race_multiple_flag, income_moderate_flag, standard_flag),
-         race_multiple_income_high=create_var(race_multiple_flag, income_high_flag, standard_flag),
+         race_multiple_income_verylow = create_var(race_multiple_flag, income_verylow_flag, standard_flag),
+         race_multiple_income_low = create_var(race_multiple_flag, income_low_flag, standard_flag),
+         race_multiple_income_moderate = create_var(race_multiple_flag, income_moderate_flag, standard_flag),
+         race_multiple_income_high = create_var(race_multiple_flag, income_high_flag, standard_flag),
          
          #Owner-occ purchase loans to mixed race/ethnicity borrowers by income
-         race_mixed_income_verylow=create_var(race_mixed_flag, income_verylow_flag, standard_flag),
-         race_mixed_income_low=create_var(race_mixed_flag, income_low_flag, standard_flag),
-         race_mixed_income_moderate=create_var(race_mixed_flag, income_moderate_flag, standard_flag),
-         race_mixed_income_high=create_var(race_mixed_flag, income_high_flag, standard_flag),         
+         race_mixed_income_verylow = create_var(race_mixed_flag, income_verylow_flag, standard_flag),
+         race_mixed_income_low = create_var(race_mixed_flag, income_low_flag, standard_flag),
+         race_mixed_income_moderate = create_var(race_mixed_flag, income_moderate_flag, standard_flag),
+         race_mixed_income_high = create_var(race_mixed_flag, income_high_flag, standard_flag),         
          
          #Owner-occ purchase loans to missing race borrowers by income
          race_missing_income_verylow = create_var(race_missing_flag, income_verylow_flag, standard_flag),
@@ -576,9 +578,11 @@ nathmda_comb <- nathmda_comb1 %>%
          age_mixed_purchase = create_var(age_mixed_flag, standard_flag),
          
          #Medians for owner-occ purchase loans
+         #Note: these aren't median values -- these are summarized to tract-level medians in a subsequent step
          income_median = if_else(standard_flag == 1, income, NA_real_),
-         loan_amount_median = if_else(standard_flag == 1, loan_amount, NA_real_),
+         owner_loan_amount_median = if_else(standard_flag == 1, loan_amount, NA_real_),
          ) %>%
+  rename(owner_purchase_originations = standard_flag) %>%
   ungroup()
 
 # Create all combined indicators
@@ -591,12 +595,12 @@ rm(nathmda_flags)
 #List of sum variables to include in the final file
 final_vars <- c(
   #Standard flag
-  "standard_flag", #owner-occupied, first-lien home purchases of 1-4 unit dwellings
+  "owner_purchase_originations", #owner-occupied, first-lien home purchases of 1-4 unit dwellings
   
   #Origination vars
-  "purpose_purchase_origination", "purpose_improvement_origination", "purpose_refinance_origination", "purpose_other_origination",
-  "units_1_4_origination", "units_5ormore_origination",
-  "lien_firstlien_origination", "lien_subordinatelien_origination",
+  #"purpose_purchase_origination", "purpose_improvement_origination", "purpose_refinance_origination", "purpose_other_origination",
+  #"units_1_4_origination", "units_5ormore_origination",
+  #"lien_firstlien_origination", "lien_subordinatelien_origination",
   
   #Investment vars
   "occupancy_investment_origination", "occupancy_investment_units_1_4", "occupancy_investment_units_5ormore",
@@ -698,6 +702,8 @@ all_checks_passed = hmda_final %>%
   ) %>%
   filter(!is.na(errors)) %>%
   select(errors, tract_id_characters, income_available, income_check,  matches("income"), -matches("race"), geo2010)
+
+all_checks_passed
 
 codebook = readxl::read_xlsx(here("Urban-HMDA_neighborhood_data_codebook.xlsx"), sheet = 2)
 
