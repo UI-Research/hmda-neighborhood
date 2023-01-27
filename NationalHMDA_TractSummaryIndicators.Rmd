@@ -96,10 +96,7 @@ nathmda_in <- read_parquet(file = rawfile, col_select = all_of(hmda_columns)) %>
       #Create ucounty from the county_code var if the state part is valid; 00, 03, 07 and 80 are not state FIPS codes
       ucounty = case_when(
         ust %in% c("00","03","07","80") ~ as.character(NA), 
-        TRUE ~ as.character(county_code))) %>% 
-    
-    # for testing purposes only, select a random sample of rows
-    sample_n(1000)
+        TRUE ~ as.character(county_code)))
   
 # Read income limits file and define max limits for each county
 print(paste("Step 2: Read income limits file and define max limits for each county", Sys.time()))
