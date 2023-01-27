@@ -74,12 +74,11 @@ hmda_columns = c(
   "purchaser_type"
   )
 
-?read_parquet
-
 #Reading the HMDA parquet file
 #Only reading in the needed columns to limit file size
-nathmda_in <- read_parquet(file = rawfile, col_select = all_of(hmda_columns)) %>%
+nathmda_in <- read_parquet(file = rawfile, col_select = hmda_columns) %>%
     mutate(
+      
       #If the census tract is coded as "na" then switch to proper missing
       census_tract = case_when(
         census_tract %in% c("na", "nA") ~ as.character(NA), 
@@ -100,6 +99,7 @@ nathmda_in <- read_parquet(file = rawfile, col_select = all_of(hmda_columns)) %>
     
     # for testing purposes only, select a random sample of rows
     sample_n(1000)
+
   
 # Read income limits file and define max limits for each county
 print(paste("Step 2: Read income limits file and define max limits for each county", Sys.time()))
@@ -348,6 +348,9 @@ nathmda_flags <- left_join(nathmda_geo, il_in, by = "ucounty") %>%
       
       #Sex AND income is available denominator
       sex_income_avail = if_else(sex_available == 1 & income_available == 1, 1, 0),
+          
+      #Loan amount flag
+      #missing_loan_amount = case_when(is.na(loan_amount) ~ 1, TRUE ~ 0),
       
       #Age flags
       across(
@@ -421,10 +424,26 @@ nathmda_comb1 <- nathmda_flags %>%
          occupancy_investment_units_1_4 = create_var(occupancy_investment_flag, outcome_originated_flag, lien_firstlien_flag, units_1_4_flag),
          occupancy_investment_units_5ormore = create_var(occupancy_investment_flag, outcome_originated_flag, lien_firstlien_flag, units_5ormore_flag),
          
+         #Originations by loan type
+         #purpose_purchase_origination = create_var(purpose_purchase_flag, outcome_originated_flag),
+         #purpose_improvement_origination = create_var(purpose_improvement_flag, outcome_originated_flag),
+         #purpose_refinance_origination = create_var(purpose_refinance_flag, outcome_originated_flag),
+         #purpose_other_origination = create_var(purpose_other_flag, outcome_originated_flag),
+         
+         #Originations by unit count
+         #units_1_4_origination = create_var(units_1_4_flag, outcome_originated_flag),
+         #units_5ormore_origination = create_var(units_5ormore_flag, outcome_originated_flag),
+         
+         #Originations by lien type
+         #lien_firstlien_origination = create_var(lien_firstlien_flag, outcome_originated_flag),
+         #lien_subordinatelien_origination = create_var(lien_subordinatelien_flag, outcome_originated_flag),
+         
          #Denominators
          income_available = create_var(income_available, standard_flag),
          race_available = create_var(race_available, standard_flag),
          race_income_available = create_var(race_available, income_available, standard_flag),
+         #sex_avail = create_var(sex_avail, standard_flag),
+         #sex_income_avail = create_var(sex_avail, income_avail, standard_flag),
          age_available = create_var(age_available, standard_flag),
          
          #Owner-occ purchase loans by race
@@ -485,6 +504,18 @@ nathmda_comb <- nathmda_comb1 %>%
          race_aian_income_moderate = create_var(race_aian_flag, income_moderate_flag, standard_flag),
          race_aian_income_high = create_var(race_aian_flag, income_high_flag, standard_flag),
          
+         #Owner-occ purchase loans to asian borrowers by income
+         #race_asian_income_verylow = create_var(race_asian_flag, income_verylow_flag, standard_flag),
+         #race_asian_income_low = create_var(race_asian_flag, income_low_flag, standard_flag),
+         #race_asian_income_moderate = create_var(race_asian_flag, income_moderate_flag, standard_flag),
+         #race_asian_income_high = create_var(race_asian_flag, income_high_flag, standard_flag),
+         
+         #Owner-occ purchase loans to native hawaiian or pacific islander borrowers by income
+         #race_nhpi_income_verylow = create_var(race_nhpi_flag, income_verylow_flag, standard_flag),
+         #race_nhpi_income_low = create_var(race_nhpi_flag, income_low_flag, standard_flag),
+         #race_nhpi_income_moderate = create_var(race_nhpi_flag, income_moderate_flag, standard_flag),
+         #race_nhpi_income_high = create_var(race_nhpi_flag, income_high_flag, standard_flag),
+         
          #Owner-occ purchase loans to asian, native hawaiian, or pacific islander borrowers by income
          race_asian_or_nhpi_income_verylow = create_var(race_asian_or_nhpi_flag, income_verylow_flag, standard_flag),
          race_asian_or_nhpi_income_low = create_var(race_asian_or_nhpi_flag, income_low_flag, standard_flag),
@@ -514,7 +545,31 @@ nathmda_comb <- nathmda_comb1 %>%
          race_other_income_low = create_var(race_other_flag, income_low_flag, standard_flag),
          race_other_income_moderate = create_var(race_other_flag, income_moderate_flag, standard_flag),
          race_other_income_high = create_var(race_other_flag, income_high_flag, standard_flag),
-
+         
+         #Owner-occ purchase loans by sex
+         #man_purchase=create_var(male_flag,standard_flag),
+         #wom_purchase=create_var(female_flag,standard_flag),
+         #mixedsex_purchase=create_var(jointsex_flag,standard_flag),
+         #nasex_purchase=create_var(nasex_flag,standard_flag),
+         
+         #Owner-occ purchase loans to male borrowers by income
+         #man_income_verylow=create_var(male_flag,income_verylow_flag,standard_flag),
+         #man_income_low=create_var(male_flag,income_low_flag,standard_flag),
+         #man_income_moderate=create_var(male_flag,income_moderate_flag,standard_flag),
+         #man_income_high=create_var(male_flag,income_high_flag,standard_flag),
+         
+         #Owner-occ purchase loans to female borrowers by income
+         #wom_income_verylow=create_var(female_flag,income_verylow_flag,standard_flag),
+         #wom_income_low=create_var(female_flag,income_low_flag,standard_flag),
+         #wom_income_moderate=create_var(female_flag,income_moderate_flag,standard_flag),
+         #wom_income_high=create_var(female_flag,income_high_flag,standard_flag),
+         
+         #Owner-occ purchase loans to mixed sex borrowers by income
+         #mixedsex_income_verylow=create_var(jointsex_flag,income_verylow_flag,standard_flag),
+         #mixedsex_income_low=create_var(jointsex_flag,income_low_flag,standard_flag),
+         #mixedsex_income_moderate=create_var(jointsex_flag,income_moderate_flag,standard_flag),
+         #mixedsex_income_high=create_var(jointsex_flag,income_high_flag,standard_flag),
+         
          #Owner-occ purchase loans by age
          age_older_purchase = create_var(age_older_flag, standard_flag),
          age_middleolder_purchase = create_var(age_middleolder_flag, standard_flag),
@@ -539,7 +594,13 @@ rm(nathmda_flags)
 
 #List of sum variables to include in the final file
 final_vars <- c(
+  #Standard flag
   "owner_purchase_originations", #owner-occupied, first-lien home purchases of 1-4 unit dwellings
+  
+  #Origination vars
+  #"purpose_purchase_origination", "purpose_improvement_origination", "purpose_refinance_origination", "purpose_other_origination",
+  #"units_1_4_origination", "units_5ormore_origination",
+  #"lien_firstlien_origination", "lien_subordinatelien_origination",
   
   #Investment vars
   "occupancy_investment_origination", "occupancy_investment_units_1_4", "occupancy_investment_units_5ormore",
@@ -565,6 +626,14 @@ final_vars <- c(
   "race_mixed_income_verylow","race_mixed_income_low","race_mixed_income_moderate","race_mixed_income_high",
   "race_missing_income_verylow","race_missing_income_low","race_missing_income_moderate","race_missing_income_high",
   "race_other_income_verylow","race_other_income_low","race_other_income_moderate","race_other_income_high",
+                
+  #Sex vars
+  #"man_purchase","wom_purchase","mixedsex_purchase","nasex_purchase",
+                
+  #Gender by income
+  #"man_income_verylow","man_income_low","man_income_moderate","man_income_high",
+  #"wom_income_verylow","wom_income_low","wom_income_moderate","wom_income_high",
+  #"mixedsex_income_verylow","mixedsex_income_low","mixedsex_income_moderate","mixedsex_income_high",
   
   #Age vars
   "age_older_purchase", "age_middleolder_purchase", "age_middleyounger_purchase", "age_younger_purchase", "age_mixed_purchase",
@@ -579,7 +648,7 @@ print(paste("Step 9: Summarize by tract", Sys.time()))
 hmda_tract <- nathmda_comb %>%
   group_by(geo2010) %>% 
   summarise(
-    across(all_of(final_vars), sum, na.rm = TRUE),
+    across(final_vars, sum, na.rm = TRUE),
     across(matches("median"), median, na.rm = TRUE),
     ) %>% 
   left_join(
