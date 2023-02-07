@@ -74,8 +74,6 @@ hmda_columns = c(
   "purchaser_type"
   )
 
-?read_parquet
-
 #Reading the HMDA parquet file
 #Only reading in the needed columns to limit file size
 nathmda_in <- read_parquet(file = rawfile, col_select = all_of(hmda_columns)) %>%
@@ -96,7 +94,7 @@ nathmda_in <- read_parquet(file = rawfile, col_select = all_of(hmda_columns)) %>
       #Create ucounty from the county_code var if the state part is valid; 00, 03, 07 and 80 are not state FIPS codes
       ucounty = case_when(
         ust %in% c("00","03","07","80") ~ as.character(NA), 
-        TRUE ~ as.character(county_code)))
+        TRUE ~ as.character(county_code))) 
   
 # Read income limits file and define max limits for each county
 print(paste("Step 2: Read income limits file and define max limits for each county", Sys.time()))
@@ -237,7 +235,7 @@ nathmda_flags <- left_join(nathmda_geo, il_in, by = "ucounty") %>%
           
       #Dwelling count flags
       units_1_4_flag = if_else(derived_dwelling_category %in% c('Single Family (1-4 Units):Site-Built','Single Family (1-4 Units):Manufactured'),1,0),
-      units_5ormore_flag = if_else(derived_dwelling_category %in% c('Multifamily:Site-Built (5+ Units)','Multifamily:Manufactured (5+ Units)'),1,0),
+      units_5ormore_flag = if_else(derived_dwelling_category %in% c('Multifamily:Site-Built','Multifamily:Manufactured'),1,0),
           
       #Outcome flags
       #app_flag = 1,
@@ -391,7 +389,8 @@ nathmda_flags <- left_join(nathmda_geo, il_in, by = "ucounty") %>%
       
       #Standard flag indicating when a record is for the purchase of a principal residence on a first lien of a 1-4 unit residential building with an originated loan 
       standard_flag = if_else(occupancy_principal_flag == 1 & purpose_purchase_flag == 1 & lien_firstlien_flag == 1 & units_1_4_flag == 1 & outcome_originated_flag == 1, 1, 0)
-    ) 
+    )
+
 ```
 
 ```{r developing final indicators}
@@ -659,3 +658,4 @@ print(paste("Total Run Time:", totaltime))
 
 #End of program
 ```
+
