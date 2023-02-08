@@ -318,19 +318,6 @@ nathmda_flags <- left_join(nathmda_geo, il_in, by = "ucounty") %>%
       race_asian_japanese_flag = if_else(applicant_race_1 == 24, 1, 0),
       race_asian_korean_flag = if_else(applicant_race_1 == 25, 1, 0),
       race_asian_vietnamese_flag = if_else(applicant_race_1 == 26, 1, 0),
-        
-      #Other race flag: if race is not listed as unavailable, but no race category is specified
-      race_other_flag = if_else(
-        race_available == 1 & 
-        race_white_flag == 0 &
-        race_black_flag == 0 &
-        race_hispanic_flag == 0 &
-        race_asian_or_nhpi_flag == 0 &
-        race_aian_flag == 0 &
-        race_multiple_flag == 0 &
-        race_mixed_flag == 0,
-        1, 0
-        ), 
   
       #Sex flags
       sex_male_flag = if_else(derived_sex =='Male', 1, 0),
@@ -504,12 +491,6 @@ nathmda_comb <- nathmda_comb1 %>%
          race_missing_income_low = create_var(race_missing_flag, income_low_flag, standard_flag),
          race_missing_income_moderate = create_var(race_missing_flag, income_moderate_flag, standard_flag),
          race_missing_income_high = create_var(race_missing_flag, income_high_flag, standard_flag),
-         
-         #Owner-occ purchase loans to other race borrowers by income
-         race_other_income_verylow = create_var(race_other_flag, income_verylow_flag, standard_flag),
-         race_other_income_low = create_var(race_other_flag, income_low_flag, standard_flag),
-         race_other_income_moderate = create_var(race_other_flag, income_moderate_flag, standard_flag),
-         race_other_income_high = create_var(race_other_flag, income_high_flag, standard_flag),
 
          #Owner-occ purchase loans by age
          age_older_purchase = create_var(age_older_flag, standard_flag),
@@ -545,7 +526,7 @@ final_vars <- c(
                 
   #Race/ethnicity vars
   "race_white_purchase", "race_black_purchase", "race_hispanic_purchase", "race_asian_purchase", "race_nhpi_purchase", "race_asian_or_nhpi_purchase", "race_multiple_purchase",
-  "race_missing_purchase", "race_other_purchase", "race_mixed_purchase", "race_aian_purchase", "race_asian_indian_purchase", "race_asian_chinese_purchase",
+  "race_missing_purchase",  "race_mixed_purchase", "race_aian_purchase", "race_asian_indian_purchase", "race_asian_chinese_purchase",
   "race_asian_filipino_purchase", "race_asian_japanese_purchase", "race_asian_korean_purchase", "race_asian_vietnamese_purchase",
                 
   #Income vars
@@ -560,7 +541,6 @@ final_vars <- c(
   "race_multiple_income_verylow","race_multiple_income_low","race_multiple_income_moderate","race_multiple_income_high",
   "race_mixed_income_verylow","race_mixed_income_low","race_mixed_income_moderate","race_mixed_income_high",
   "race_missing_income_verylow","race_missing_income_low","race_missing_income_moderate","race_missing_income_high",
-  "race_other_income_verylow","race_other_income_low","race_other_income_moderate","race_other_income_high",
   
   #Age vars
   "age_older_purchase", "age_middleolder_purchase", "age_middleyounger_purchase", "age_younger_purchase", "age_mixed_purchase",
