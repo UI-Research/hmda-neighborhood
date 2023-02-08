@@ -95,7 +95,7 @@ nathmda_in <- read_parquet(file = rawfile, col_select = all_of(hmda_columns)) %>
       ucounty = case_when(
         ust %in% c("00","03","07","80") ~ as.character(NA), 
         TRUE ~ as.character(county_code))) 
-  
+
 # Read income limits file and define max limits for each county
 print(paste("Step 2: Read income limits file and define max limits for each county", Sys.time()))
 
@@ -420,7 +420,6 @@ nathmda_comb1 <- nathmda_flags %>%
          race_multiple_purchase = create_var(race_multiple_flag, standard_flag), 
          race_mixed_purchase = create_var(race_mixed_flag, standard_flag),
          race_missing_purchase = create_var(race_missing_flag, standard_flag),
-         race_other_purchase = create_var(race_other_flag, standard_flag),
   
          race_asian_or_nhpi_purchase = create_var(race_asian_or_nhpi_flag, standard_flag),
          
@@ -584,6 +583,9 @@ hmda_final <- hmda_tract %>%
 ```
 
 ```{r quality control}
+## check to ensure all variables have non-zero values in some tracts
+skimr::skim(hmda_final)
+
 ## this should return a dataframe with no rows
 all_checks_passed = hmda_final %>%
   mutate(
@@ -594,7 +596,7 @@ all_checks_passed = hmda_final %>%
     income_check = rowSums(across(c(matches("income"), -matches("race|median|available")))),
     race_check = rowSums(across(
       c(race_white_purchase, race_black_purchase, race_hispanic_purchase, race_asian_or_nhpi_purchase, 
-        race_multiple_purchase, race_mixed_purchase, race_other_purchase, race_aian_purchase)), na.rm = T),
+        race_multiple_purchase, race_mixed_purchase, race_aian_purchase)), na.rm = T),
     race_income_check = rowSums(across(c(matches("race.*income"), -matches("available|missing"))), na.rm = T),
     # all tract IDs should be 11 characters
     tract_id_characters = nchar(geo2010),
@@ -612,7 +614,7 @@ all_checks_passed = hmda_final %>%
 
 all_checks_passed
 
-codebook = readxl::read_xlsx(here("Urban-HMDA_neighborhood_data_codebook.xlsx"), sheet = 2)
+codebook = readxl::read_xlsx(here("Urban-HMDA_neighborhood_data_codebook_external.xlsx"), sheet = 2)
 
 ## check to ensure that there aren't any variables in the codebook
 ## that aren't in the final dataset. this should return a dataframe with no rows.
