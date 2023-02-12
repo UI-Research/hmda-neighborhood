@@ -33,6 +33,9 @@ ilfile <- here("data-raw", "income-limits", "Section8-FY21.csv")
 
 #Path to write final dataset
 outfile = here("data-final", paste0("hmda_tract_", year, ".csv"))
+
+#Path to codebook
+codebook_path = here("Urban-HMDA_neighborhood_data_codebook_external.xlsx")
 ```
 
 ```{r read data, cache = F}
@@ -126,6 +129,8 @@ states_tigris <- tigris::fips_codes %>%
   unite(ucounty, state_code, county_code, sep = "", remove = F) %>%
   # Dropping unneeded columns
   select(-c(state_name, county))
+
+codebook = readxl::read_xlsx(codebook_path, sheet = 2)
 ```
 
 ```{r acs housing variables}
@@ -584,6 +589,7 @@ hmda_final <- hmda_tract %>%
 
 ```{r quality control}
 ## check to ensure all variables have non-zero values in some tracts
+#skimr::fix_windows_histograms() ## if histograms do not render correctly, use this function and re-run
 skimr::skim(hmda_final)
 
 ## this should return a dataframe with no rows
@@ -613,8 +619,6 @@ all_checks_passed = hmda_final %>%
   select(errors, tract_id_characters, income_available, income_check,  matches("income"), -matches("race"), geo2010)
 
 all_checks_passed
-
-codebook = readxl::read_xlsx(here("Urban-HMDA_neighborhood_data_codebook_external.xlsx"), sheet = 2)
 
 ## check to ensure that there aren't any variables in the codebook
 ## that aren't in the final dataset. this should return a dataframe with no rows.

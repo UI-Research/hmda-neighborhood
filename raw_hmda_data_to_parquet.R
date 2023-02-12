@@ -10,11 +10,11 @@ raw_hmda_to_parquet = function(year, inpath = NULL, delimit_character = "|", out
   ## subsetted_columns: the columns to select and retain in the outputted .parquet file.
   ##  if null, default columns are selected.
   
-  year = 2020
-  inpath = NULL 
-  delimit_character = "|"  
-  outpath = NULL 
-  subsetted_columns = NULL
+  #year = 2020
+  #inpath = NULL 
+  #delimit_character = "|"  
+  #outpath = NULL 
+  #subsetted_columns = NULL
   
   year = as.character(year)
   
@@ -61,14 +61,23 @@ raw_hmda_to_parquet = function(year, inpath = NULL, delimit_character = "|", out
     error = function(e) { stop("Error reading inpath file. The subsetted columns may not be present in the inpath file.")}
   )
   
+  read_chunk_callback = function(x, cols) { x %>% select(all_of(subsetted_columns)) }
+  
   raw_text_subsetted = tryCatch(
-    { read_delim(inpath, delim = delimit_character, col_select = all_of(subsetted_columns)) },
-    error = function(e) { stop("Error reading inpath file. Did you provide the correct delimit_character value for the input file-type?")}
+    { read_delim_chunked(inpath, delim = delimit_character, callback = DataFrameCallback$new(read_chunk_callback), chunk_size = 100000) },
+    error = function(e) { stop(e)}
   )
   
   write_parquet(raw_text_subsetted, sink = outpath)
   
 }
 
-raw_hmda_to_parquet(year = 2020)
+raw_hmda_to_parquet(year = 2020) # ~10GB to ~375MB
+raw_hmda_to_parquet(year = 2019) # ~6.5GB to ~260 MB
+raw_hmda_to_parquet(year = 2018) # ~5.7GB to ~220 MB
+## there are no column headers included in the 2017 data...?
+#raw_hmda_to_parquet(year = 2017) # ~1.75GB to ~
+
+#gc(full = T)
+# temp = arrow::read_parquet(here("data-raw", paste0("raw_hmda_lar_", "2020", ".parquet")))
 
