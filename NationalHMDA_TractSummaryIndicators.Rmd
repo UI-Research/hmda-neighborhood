@@ -25,17 +25,22 @@ library(arrow)
 #Update this value to the appropriate year
 year = "2021"
 
-#Relative path to the raw HMDA dataset (.parquet) - ~1.1 GB:
-rawfile <- here("data-raw", "lar_parquet_2021.parquet")
+#Relative path to the raw HMDA dataset (.parquet) - ~1.1 GB
+hmda_path = here("data-raw") %>% list.files(full.names = T) %>% str_match(paste0(".*", year, ".*\\.parquet")) %>% .[!is.na(.)] 
 
-#Location of income limit data (csv): 
-ilfile <- here("data-raw", "income-limits", "Section8-FY21.csv")
+#Data source: https://www.huduser.gov/portal/datasets/il/il21/Section8-FY21.xlsx
+#Path to income limit data (csv):
+income_limits_path <- here("data-raw", "income-limits", "Section8-FY21.csv")
 
-#Path to write final dataset
-outfile = here("data-final", paste0("hmda_tract_", year, ".csv"))
-
-#Path to codebook
+#Path to codebook (.xlsx)
 codebook_path = here("Urban-HMDA_neighborhood_data_codebook_external.xlsx")
+
+#Path to write final dataset (csv)
+output_path = here("data-final", paste0("hmda_tract_", year, ".csv"))
+
+if ( !file.exists(hmda_path) ) { stop(paste0("There is no HMDA data file at the designated path: ", hmda_path)) }
+if ( !file.exists(income_limits_path) ) { stop(paste0("There is no income limits data file at the designated path: ", income_limits_path)) }
+if ( !file.exists(codebook_path) ) { stop(paste0("There is no codebook at the designated path: ", codebook_path)) }
 ```
 
 ```{r read data, cache = F}
@@ -79,7 +84,7 @@ hmda_columns = c(
 
 #Reading the HMDA parquet file
 #Only reading in the needed columns to limit file size
-nathmda_in <- read_parquet(file = rawfile, col_select = all_of(hmda_columns)) %>%
+hmda_raw <- read_parquet(file = hmda_path, col_select = all_of(hmda_columns)) %>%
     mutate(
       #If the census tract is coded as "na" then switch to proper missing
       census_tract = case_when(
@@ -97,12 +102,12 @@ nathmda_in <- read_parquet(file = rawfile, col_select = all_of(hmda_columns)) %>
       #Create ucounty from the county_code var if the state part is valid; 00, 03, 07 and 80 are not state FIPS codes
       ucounty = case_when(
         ust %in% c("00","03","07","80") ~ as.character(NA), 
-        TRUE ~ as.character(county_code))) 
+        TRUE ~ as.character(county_code)))
 
 # Read income limits file and define max limits for each county
 print(paste("Step 2: Read income limits file and define max limits for each county", Sys.time()))
 
-il_in <- read_csv(ilfile) %>%
+income_limits_raw <- read_csv(income_limits_path) %>%
   select(all_of(income_limits_columns)) %>%
   mutate(
     #Create padded state FIPs code
@@ -182,12 +187,12 @@ if (file.exists(acs_file_path)) {
 print(paste("Step 4: Merge national file state codes", Sys.time()))
 
 # Join state and county codes
-nathmda_states <- left_join(nathmda_in, states_tigris, by = c("state_code", "county_code", "ucounty"))
+hmda_states <- left_join(hmda_raw, states_tigris, by = c("state_code", "county_code", "ucounty"))
 
 # Merge national file and counties, flag and create dummy codes for missing tracts/counties
 print(paste("Step 5: Merge national file and counties, flag and create dummy codes for missing tracts/counties", Sys.time()))
 
-nathmda_geo <- nathmda_states %>%
+hmda_geo <- hmda_states %>%
   mutate(
     # Derive ucounty from census_tract when the first is missing and the second is not
     ucounty = case_when(
@@ -215,7 +220,7 @@ nathmda_geo <- nathmda_states %>%
 # Merge income limit data and create characteristic flags
 print(paste("Step 6: Merge income limit data and create characteristic flags", Sys.time()))
 
-nathmda_flags <- left_join(nathmda_geo, il_in, by = "ucounty") %>%
+hmda_flags <- left_join(hmda_geo, income_limits_raw, by = "ucounty") %>%
     mutate(
       income = income * 1000, #converting to thousands to align with denomination of income limits
       
@@ -386,9 +391,9 @@ nathmda_flags <- left_join(nathmda_geo, il_in, by = "ucounty") %>%
 ```
 
 ```{r developing final indicators}
-rm(nathmda_geo)
-rm(nathmda_in)
-rm(nathmda_states)
+rm(hmda_raw)
+rm(hmda_states)
+rm(hmda_geo)
 
 # This function creates final variables by taking any flag variables that are input
 # and checking that all conditions are equal to one
@@ -399,124 +404,118 @@ create_var <- function(...){
 # Create all combined indicators
 print(paste("Step 7: Create all combined indicators", Sys.time()))
 
-nathmda_comb1 <- nathmda_flags %>%
-  rowwise %>%
+hmda_combined1 <- hmda_flags %>%
   mutate(
-         #Occupancy - investment
-         occupancy_investment_origination = create_var(occupancy_investment_flag, lien_firstlien_flag, outcome_originated_flag),
-         
-         #Occupancy - investment by unit size
-         occupancy_investment_units_1_4 = create_var(occupancy_investment_flag, outcome_originated_flag, lien_firstlien_flag, units_1_4_flag),
-         occupancy_investment_units_5ormore = create_var(occupancy_investment_flag, outcome_originated_flag, lien_firstlien_flag, units_5ormore_flag),
-         
-         #Denominators
-         income_available = create_var(income_available, standard_flag),
-         race_available = create_var(race_available, standard_flag),
-         race_income_available = create_var(race_available, income_available, standard_flag),
-         age_available = create_var(age_available, standard_flag),
-         
-         #Owner-occ purchase loans by race
-         race_white_purchase = create_var(race_white_flag, standard_flag),
-         race_black_purchase = create_var(race_black_flag, standard_flag),
-         race_hispanic_purchase = create_var(race_hispanic_flag, standard_flag),
-         race_asian_purchase = create_var(race_asian_flag, standard_flag),
-         race_nhpi_purchase = create_var(race_nhpi_flag, standard_flag),
-         race_aian_purchase = create_var(race_aian_flag, standard_flag),
-         race_multiple_purchase = create_var(race_multiple_flag, standard_flag), 
-         race_mixed_purchase = create_var(race_mixed_flag, standard_flag),
-         race_missing_purchase = create_var(race_missing_flag, standard_flag),
-  
-         race_asian_or_nhpi_purchase = create_var(race_asian_or_nhpi_flag, standard_flag),
-         
-         #Owner-occ purchase loans by specific race 
-         race_asian_indian_purchase = create_var(race_asian_indian_flag, standard_flag),
-         race_asian_chinese_purchase = create_var(race_asian_chinese_flag, standard_flag),
-         race_asian_filipino_purchase = create_var(race_asian_filipino_flag, standard_flag),
-         race_asian_japanese_purchase = create_var(race_asian_japanese_flag, standard_flag),
-         race_asian_korean_purchase = create_var(race_asian_korean_flag, standard_flag),
-         race_asian_vietnamese_purchase = create_var(race_asian_vietnamese_flag, standard_flag),
-  ) %>%
-  ungroup()
+    #Occupancy - investment
+    occupancy_investment_origination = pmap_dbl(list(occupancy_investment_flag, lien_firstlien_flag, outcome_originated_flag), ~ create_var(c(...))),
+    
+    #Occupancy - investment by unit size
+    occupancy_investment_units_1_4 = pmap_dbl(list(occupancy_investment_flag, outcome_originated_flag, lien_firstlien_flag, units_1_4_flag), ~ create_var(c(...))),
+    occupancy_investment_units_5ormore = pmap_dbl(list(occupancy_investment_flag, outcome_originated_flag, lien_firstlien_flag, units_5ormore_flag), ~ create_var(c(...))),
+    
+    #Denominators
+    income_available = pmap_dbl(list(income_available, standard_flag), ~ create_var(c(...))),
+    race_available = pmap_dbl(list(race_available, standard_flag), ~ create_var(c(...))),
+    race_income_available = pmap_dbl(list(race_available, income_available, standard_flag), ~ create_var(c(...))),
+    age_available = pmap_dbl(list(age_available, standard_flag), ~ create_var(c(...))),
+    
+    #Owner-occ purchase loans by race
+    race_white_purchase = pmap_dbl(list(race_white_flag, standard_flag), ~ create_var(c(...))),
+    race_black_purchase = pmap_dbl(list(race_black_flag, standard_flag), ~ create_var(c(...))),
+    race_hispanic_purchase = pmap_dbl(list(race_hispanic_flag, standard_flag), ~ create_var(c(...))),
+    race_asian_purchase = pmap_dbl(list(race_asian_flag, standard_flag), ~ create_var(c(...))),
+    race_nhpi_purchase = pmap_dbl(list(race_nhpi_flag, standard_flag), ~ create_var(c(...))),
+    race_aian_purchase = pmap_dbl(list(race_aian_flag, standard_flag), ~ create_var(c(...))),
+    race_multiple_purchase = pmap_dbl(list(race_multiple_flag, standard_flag), ~ create_var(c(...))), 
+    race_mixed_purchase = pmap_dbl(list(race_mixed_flag, standard_flag), ~ create_var(c(...))),
+    race_missing_purchase = pmap_dbl(list(race_missing_flag, standard_flag), ~ create_var(c(...))),
+    
+    race_asian_or_nhpi_purchase = pmap_dbl(list(race_asian_or_nhpi_flag, standard_flag), ~ create_var(c(...))),
+    
+    #Owner-occ purchase loans by specific race 
+    race_asian_indian_purchase = pmap_dbl(list(race_asian_indian_flag, standard_flag), ~ create_var(c(...))),
+    race_asian_chinese_purchase = pmap_dbl(list(race_asian_chinese_flag, standard_flag), ~ create_var(c(...))),
+    race_asian_filipino_purchase = pmap_dbl(list(race_asian_filipino_flag, standard_flag), ~ create_var(c(...))),
+    race_asian_japanese_purchase = pmap_dbl(list(race_asian_japanese_flag, standard_flag), ~ create_var(c(...))),
+    race_asian_korean_purchase = pmap_dbl(list(race_asian_korean_flag, standard_flag), ~ create_var(c(...))),
+    race_asian_vietnamese_purchase = pmap_dbl(list(race_asian_vietnamese_flag, standard_flag), ~ create_var(c(...))))
 
-nathmda_comb <- nathmda_comb1 %>%
-  rowwise %>%
+hmda_combined2 <- hmda_combined1 %>%
   mutate(        
-         #Owner-occ purchase loans by income
-         income_verylow_purchase = create_var(income_verylow_flag, standard_flag),
-         income_low_purchase = create_var(income_low_flag, standard_flag),
-         income_moderate_purchase = create_var(income_moderate_flag, standard_flag),
-         income_high_purchase = create_var(income_high_flag, standard_flag),
-         income_missing_purchase = create_var(income_missing_flag, standard_flag),
-         
-         #Owner-occ purchase loans to white borrowers by income
-         race_white_income_verylow = create_var(race_white_flag, income_verylow_flag, standard_flag),
-         race_white_income_low = create_var(race_white_flag, income_low_flag, standard_flag),
-         race_white_income_moderate = create_var(race_white_flag, income_moderate_flag, standard_flag),
-         race_white_income_high = create_var(race_white_flag, income_high_flag, standard_flag),
-         
-         #Owner-occ purchaseloans to black borrowers by income
-         race_black_income_verylow = create_var(race_black_flag, income_verylow_flag, standard_flag),
-         race_black_income_low = create_var(race_black_flag, income_low_flag, standard_flag),
-         race_black_income_moderate = create_var(race_black_flag, income_moderate_flag, standard_flag),
-         race_black_income_high = create_var(race_black_flag, income_high_flag, standard_flag),
-         
-         #Owner-occ purchase loans to Hispanic borrowers by income
-         race_hispanic_income_verylow = create_var(race_hispanic_flag, income_verylow_flag, standard_flag),
-         race_hispanic_income_low = create_var(race_hispanic_flag, income_low_flag, standard_flag),
-         race_hispanic_income_moderate = create_var(race_hispanic_flag, income_moderate_flag, standard_flag),
-         race_hispanic_income_high = create_var(race_hispanic_flag, income_high_flag, standard_flag),
-         
-         #Owner-occ purchase loans to American Indian or Alaskan Native borrowers by income
-         race_aian_income_verylow = create_var(race_aian_flag, income_verylow_flag, standard_flag),
-         race_aian_income_low = create_var(race_aian_flag, income_low_flag, standard_flag),
-         race_aian_income_moderate = create_var(race_aian_flag, income_moderate_flag, standard_flag),
-         race_aian_income_high = create_var(race_aian_flag, income_high_flag, standard_flag),
-         
-         #Owner-occ purchase loans to asian, native hawaiian, or pacific islander borrowers by income
-         race_asian_or_nhpi_income_verylow = create_var(race_asian_or_nhpi_flag, income_verylow_flag, standard_flag),
-         race_asian_or_nhpi_income_low = create_var(race_asian_or_nhpi_flag, income_low_flag, standard_flag),
-         race_asian_or_nhpi_income_moderate = create_var(race_asian_or_nhpi_flag, income_moderate_flag, standard_flag),
-         race_asian_or_nhpi_income_high = create_var(race_asian_or_nhpi_flag, income_high_flag, standard_flag),
-         
-         #Owner-occ purchase loans to multiple race/ethnicity borrowers by income
-         race_multiple_income_verylow = create_var(race_multiple_flag, income_verylow_flag, standard_flag),
-         race_multiple_income_low = create_var(race_multiple_flag, income_low_flag, standard_flag),
-         race_multiple_income_moderate = create_var(race_multiple_flag, income_moderate_flag, standard_flag),
-         race_multiple_income_high = create_var(race_multiple_flag, income_high_flag, standard_flag),
-         
-         #Owner-occ purchase loans to mixed race/ethnicity borrowers by income
-         race_mixed_income_verylow = create_var(race_mixed_flag, income_verylow_flag, standard_flag),
-         race_mixed_income_low = create_var(race_mixed_flag, income_low_flag, standard_flag),
-         race_mixed_income_moderate = create_var(race_mixed_flag, income_moderate_flag, standard_flag),
-         race_mixed_income_high = create_var(race_mixed_flag, income_high_flag, standard_flag),         
-         
-         #Owner-occ purchase loans to missing race borrowers by income
-         race_missing_income_verylow = create_var(race_missing_flag, income_verylow_flag, standard_flag),
-         race_missing_income_low = create_var(race_missing_flag, income_low_flag, standard_flag),
-         race_missing_income_moderate = create_var(race_missing_flag, income_moderate_flag, standard_flag),
-         race_missing_income_high = create_var(race_missing_flag, income_high_flag, standard_flag),
-
-         #Owner-occ purchase loans by age
-         age_older_purchase = create_var(age_older_flag, standard_flag),
-         age_middleolder_purchase = create_var(age_middleolder_flag, standard_flag),
-         age_middleyounger_purchase = create_var(age_middleyounger_flag, standard_flag),
-         age_younger_purchase = create_var(age_younger_flag, standard_flag),
-         age_mixed_purchase = create_var(age_mixed_flag, standard_flag),
-         
-         #Medians for owner-occ purchase loans
-         #Note: these aren't median values -- these are summarized to tract-level medians in a subsequent step
-         income_median = if_else(standard_flag == 1, income, NA_real_),
-         owner_loan_amount_median = if_else(standard_flag == 1, loan_amount, NA_real_),
-         ) %>%
-  rename(owner_purchase_originations = standard_flag) %>%
-  ungroup()
+    #Owner-occ purchase loans by income
+    income_verylow_purchase = pmap_dbl(list(income_verylow_flag, standard_flag), ~ create_var(c(...))),
+    income_low_purchase = pmap_dbl(list(income_low_flag, standard_flag), ~ create_var(c(...))),
+    income_moderate_purchase = pmap_dbl(list(income_moderate_flag, standard_flag), ~ create_var(c(...))),
+    income_high_purchase = pmap_dbl(list(income_high_flag, standard_flag), ~ create_var(c(...))),
+    income_missing_purchase = pmap_dbl(list(income_missing_flag, standard_flag), ~ create_var(c(...))),
+    
+    #Owner-occ purchase loans to white borrowers by income
+    race_white_income_verylow = pmap_dbl(list(race_white_flag, income_verylow_flag, standard_flag), ~ create_var(c(...))),
+    race_white_income_low = pmap_dbl(list(race_white_flag, income_low_flag, standard_flag), ~ create_var(c(...))),
+    race_white_income_moderate = pmap_dbl(list(race_white_flag, income_moderate_flag, standard_flag), ~ create_var(c(...))),
+    race_white_income_high = pmap_dbl(list(race_white_flag, income_high_flag, standard_flag), ~ create_var(c(...))),
+    
+    #Owner-occ purchaseloans to black borrowers by income
+    race_black_income_verylow = pmap_dbl(list(race_black_flag, income_verylow_flag, standard_flag), ~ create_var(c(...))),
+    race_black_income_low = pmap_dbl(list(race_black_flag, income_low_flag, standard_flag), ~ create_var(c(...))),
+    race_black_income_moderate = pmap_dbl(list(race_black_flag, income_moderate_flag, standard_flag), ~ create_var(c(...))),
+    race_black_income_high = pmap_dbl(list(race_black_flag, income_high_flag, standard_flag), ~ create_var(c(...))),
+    
+    #Owner-occ purchase loans to Hispanic borrowers by income
+    race_hispanic_income_verylow = pmap_dbl(list(race_hispanic_flag, income_verylow_flag, standard_flag), ~ create_var(c(...))),
+    race_hispanic_income_low = pmap_dbl(list(race_hispanic_flag, income_low_flag, standard_flag), ~ create_var(c(...))),
+    race_hispanic_income_moderate = pmap_dbl(list(race_hispanic_flag, income_moderate_flag, standard_flag), ~ create_var(c(...))),
+    race_hispanic_income_high = pmap_dbl(list(race_hispanic_flag, income_high_flag, standard_flag), ~ create_var(c(...))),
+    
+    #Owner-occ purchase loans to American Indian or Alaskan Native borrowers by income
+    race_aian_income_verylow = pmap_dbl(list(race_aian_flag, income_verylow_flag, standard_flag), ~ create_var(c(...))),
+    race_aian_income_low = pmap_dbl(list(race_aian_flag, income_low_flag, standard_flag), ~ create_var(c(...))),
+    race_aian_income_moderate = pmap_dbl(list(race_aian_flag, income_moderate_flag, standard_flag), ~ create_var(c(...))),
+    race_aian_income_high = pmap_dbl(list(race_aian_flag, income_high_flag, standard_flag), ~ create_var(c(...))),
+    
+    #Owner-occ purchase loans to asian, native hawaiian, or pacific islander borrowers by income
+    race_asian_or_nhpi_income_verylow = pmap_dbl(list(race_asian_or_nhpi_flag, income_verylow_flag, standard_flag), ~ create_var(c(...))),
+    race_asian_or_nhpi_income_low = pmap_dbl(list(race_asian_or_nhpi_flag, income_low_flag, standard_flag), ~ create_var(c(...))),
+    race_asian_or_nhpi_income_moderate = pmap_dbl(list(race_asian_or_nhpi_flag, income_moderate_flag, standard_flag), ~ create_var(c(...))),
+    race_asian_or_nhpi_income_high = pmap_dbl(list(race_asian_or_nhpi_flag, income_high_flag, standard_flag), ~ create_var(c(...))),
+    
+    #Owner-occ purchase loans to multiple race/ethnicity borrowers by income
+    race_multiple_income_verylow = pmap_dbl(list(race_multiple_flag, income_verylow_flag, standard_flag), ~ create_var(c(...))),
+    race_multiple_income_low = pmap_dbl(list(race_multiple_flag, income_low_flag, standard_flag), ~ create_var(c(...))),
+    race_multiple_income_moderate = pmap_dbl(list(race_multiple_flag, income_moderate_flag, standard_flag), ~ create_var(c(...))),
+    race_multiple_income_high = pmap_dbl(list(race_multiple_flag, income_high_flag, standard_flag), ~ create_var(c(...))),
+    
+    #Owner-occ purchase loans to mixed race/ethnicity borrowers by income
+    race_mixed_income_verylow = pmap_dbl(list(race_mixed_flag, income_verylow_flag, standard_flag), ~ create_var(c(...))),
+    race_mixed_income_low = pmap_dbl(list(race_mixed_flag, income_low_flag, standard_flag), ~ create_var(c(...))),
+    race_mixed_income_moderate = pmap_dbl(list(race_mixed_flag, income_moderate_flag, standard_flag), ~ create_var(c(...))),
+    race_mixed_income_high = pmap_dbl(list(race_mixed_flag, income_high_flag, standard_flag), ~ create_var(c(...))),         
+    
+    #Owner-occ purchase loans to missing race borrowers by income
+    race_missing_income_verylow = pmap_dbl(list(race_missing_flag, income_verylow_flag, standard_flag), ~ create_var(c(...))),
+    race_missing_income_low = pmap_dbl(list(race_missing_flag, income_low_flag, standard_flag), ~ create_var(c(...))),
+    race_missing_income_moderate = pmap_dbl(list(race_missing_flag, income_moderate_flag, standard_flag), ~ create_var(c(...))),
+    race_missing_income_high = pmap_dbl(list(race_missing_flag, income_high_flag, standard_flag), ~ create_var(c(...))),
+    
+    #Owner-occ purchase loans by age
+    age_older_purchase = pmap_dbl(list(age_older_flag, standard_flag), ~ create_var(c(...))),
+    age_middleolder_purchase = pmap_dbl(list(age_middleolder_flag, standard_flag), ~ create_var(c(...))),
+    age_middleyounger_purchase = pmap_dbl(list(age_middleyounger_flag, standard_flag), ~ create_var(c(...))),
+    age_younger_purchase = pmap_dbl(list(age_younger_flag, standard_flag), ~ create_var(c(...))),
+    age_mixed_purchase = pmap_dbl(list(age_mixed_flag, standard_flag), ~ create_var(c(...))),
+    
+    #Medians for owner-occ purchase loans
+    #Note: these aren't median values -- these are summarized to tract-level medians in a subsequent step
+    income_median = if_else(standard_flag == 1, income, NA_real_), 
+    owner_loan_amount_median = if_else(standard_flag == 1, loan_amount, NA_real_)) %>%
+  rename(owner_purchase_originations = standard_flag)
 
 # Create all combined indicators
 print(paste("Step 8: Created all combined indicators", Sys.time() ))
 ```
 
 ```{r producing final dataset}
-rm(nathmda_flags)
+rm(hmda_flags)
 
 #List of sum variables to include in the final file
 final_vars <- c(
@@ -556,7 +555,7 @@ final_vars <- c(
 #Summarize by tract 
 print(paste("Step 9: Summarize by tract", Sys.time()))
 
-hmda_tract <- nathmda_comb %>%
+hmda_tract <- hmda_combined2 %>%
   group_by(geo2010) %>% 
   summarise(
     across(all_of(final_vars), sum, na.rm = TRUE),
@@ -634,7 +633,7 @@ colnames(hmda_final)[!(colnames(hmda_final) %in% codebook$`Name - 2021`)]
 #Export final CSV
 print(paste("Step 11: Export CSV", Sys.time()))
 
-write_csv(hmda_final, outfile)
+write_csv(hmda_final, output_path)
 
 #End time for log
 endtime <- Sys.time()
