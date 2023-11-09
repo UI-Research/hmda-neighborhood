@@ -1,7 +1,0 @@
-Variable,Number Missing,Complete Rate,Mean,SD,Percentile 0,Percentile 25,Percentile 50,Percentile 75,Percentile 100,Total
-olderage_purch,0,1,3.452492274,7.182220653,0,0,2,4,580,261402
-middleyounger_age_purch,0,1,34.03423409,43.51720542,0,11,24,44,1470,2576868
-middleolder_age_purch,0,1,14.17555538,19.21518644,0,4,10,18,550,1073288
-youngerage_purch,0,1,3.011966083,4.52509364,0,0,2,4,129,228048
-mixedage_purch,0,1,5.448913015,7.449475317,0,1,4,7,216,412559
-,,,,,,,,,,4552165

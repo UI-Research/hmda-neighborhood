@@ -8,13 +8,7 @@ raw_hmda_to_parquet = function(year, inpath = NULL, delimit_character = "|", out
   ## delimit_character: the symbol used to separate values in the inpath file.
   ## outpath: filepath to write converted file to.
   ## subsetted_columns: the columns to select and retain in the outputted .parquet file.
-  ##  if null, default columns are selected.
-  
-  #year = 2020
-  #inpath = NULL 
-  #delimit_character = "|"  
-  #outpath = NULL 
-  #subsetted_columns = NULL
+     ## if null, default columns are selected.
   
   year = as.character(year)
   
@@ -22,7 +16,7 @@ raw_hmda_to_parquet = function(year, inpath = NULL, delimit_character = "|", out
   if (is.null(outpath)) { outpath = here("data-raw", paste0("raw_hmda_lar_", year, ".parquet")) }
   
   if (!file.exists(inpath)) { stop("There is no file at the specified inpath.")}
-  if (!str_detect(outpath, ".parquet")) { stop("Outpath must be to a .parquet-suffixed file.") }
+  if (!str_detect(outpath, ".parquet")) { stop("Outpath must be to a '.parquet'-suffixed file.") }
   
   if (is.null(subsetted_columns)) {
     #The relevant HMDA columns
@@ -51,33 +45,51 @@ raw_hmda_to_parquet = function(year, inpath = NULL, delimit_character = "|", out
     )
   }
   
+  ## Note: 2017 data are missing column names and even after adding them,
+  ## many columns used in our data summarization workflow are missing. 
+  # if (year == 2017) {
+  #   df = read_delim(inpath, delim = delimit_character)
+  #   df_2017_column_names = read_csv(here("data-raw", "hmda_lar_2017_column_names.csv"))
+  #   colnames(df) = df_2017_column_names %>% pull(Field)
+  #   df2 = df %>% 
+  #     janitor::clean_names() %>%
+  #     rename(
+  #       census_tract = census_tract_number,
+  #       income = applicant_income_000s,
+  #       loan_amount = loan_amount_000s,
+  #       action_taken = action_type, 
+  #       derived_dwelling_category = , ## no equivalent
+  #       applicant_ethnicity_1 = applicant_ethnicity,
+  #       co_applicant_ethnicity_1 = co_applicant_ethnicity,
+  #       derived_sex = , ## no equivalent
+  #       applicant_age = , ## no equivalent
+  #       co_applicant_age = ) ## no equivalent
+  #     select(all_of(subsetted_columns))}
+  
+  ## a quick test prior to reading in full file
   raw_txt_test_delimit_character = tryCatch(
     { read_delim(inpath, delim = delimit_character, n_max = 5) },
-    error = function(e) { stop("Error reading inpath file. Did you provide the correct delimit_character value for the input file-type?")}
-  )
+    error = function(e) { stop("Error reading inpath file. Did you provide the correct delimit_character value for the input file-type?")})
   
+  ## a quick test prior to reading in full file
   raw_txt_test_subsetted_columns = tryCatch(
     { read_delim(inpath, delim = delimit_character, col_select = all_of(subsetted_columns), n_max = 5) },
-    error = function(e) { stop("Error reading inpath file. The subsetted columns may not be present in the inpath file.")}
-  )
+    error = function(e) { stop("Error reading inpath file. The subsetted columns may not be present in the inpath file.")})
   
+  ## a callback function to read the full file in chunks
   read_chunk_callback = function(x, cols) { x %>% select(all_of(subsetted_columns)) }
   
+  ## reading the fule in chunks
   raw_text_subsetted = tryCatch(
     { read_delim_chunked(inpath, delim = delimit_character, callback = DataFrameCallback$new(read_chunk_callback), chunk_size = 100000) },
-    error = function(e) { stop(e)}
-  )
+    error = function(e) { stop(e)})
   
+  ## writing the file to .parquet, a much more memory-efficient file format
   write_parquet(raw_text_subsetted, sink = outpath)
   
 }
-
-raw_hmda_to_parquet(year = 2020) # ~10GB to ~375MB
-raw_hmda_to_parquet(year = 2019) # ~6.5GB to ~260 MB
-raw_hmda_to_parquet(year = 2018) # ~5.7GB to ~220 MB
-## there are no column headers included in the 2017 data...?
-#raw_hmda_to_parquet(year = 2017) # ~1.75GB to ~
-
-#gc(full = T)
-# temp = arrow::read_parquet(here("data-raw", paste0("raw_hmda_lar_", "2020", ".parquet")))
-
+# raw_hmda_to_parquet(year = 2022) # ~5.9GB to ~375MB
+# raw_hmda_to_parquet(year = 2021) # ~10GB to ~1.1GB
+# raw_hmda_to_parquet(year = 2020) # ~9.8GB to ~375MB
+# raw_hmda_to_parquet(year = 2019) # ~6.5GB to ~260 MB
+# raw_hmda_to_parquet(year = 2018) # ~5.7GB to ~220 MB
