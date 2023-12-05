@@ -737,3 +737,24 @@ print(paste("Total Run Time:", totaltime))
 
 #End of program
 ```
+
+```{r Data Quality Testing TR}
+# load final outputted datasets
+hmda_2018 <- read.csv("C:/Users/trajninger/Documents/TR/HMDA_Analysis/hmda-neighborhood/data-final/hmda_tract_2018.csv", header=TRUE)
+hmda_2019 <- read.csv("C:/Users/trajninger/Documents/TR/HMDA_Analysis/hmda-neighborhood/data-final/hmda_tract_2019.csv", header=TRUE)
+hmda_2020 <- read.csv("C:/Users/trajninger/Documents/TR/HMDA_Analysis/hmda-neighborhood/data-final/hmda_tract_2020.csv", header=TRUE)
+hmda_2021 <- read.csv("C:/Users/trajninger/Documents/TR/HMDA_Analysis/hmda-neighborhood/data-final/hmda_tract_2021.csv", header=TRUE)
+hmda_2022 <- read.csv("C:/Users/trajninger/Documents/TR/HMDA_Analysis/hmda-neighborhood/data-final/hmda_tract_2022.csv", header=TRUE)
+
+options(scipen=999) # get rid of scientific notation
+# spot checks on final outputted datasets
+View(skimr::skim(hmda_2018))
+  # all variables are numeric
+  # all variables have minimum of 0 except owner_loan_amount_median
+  # all but 5 variables have 0 missing values
+
+  # quite a few variables have extreme outliers for the invalid geo (geo2010 == 99999999999). 
+    # ex: owner_purchase_originations (originations for first-lien owner-occupied home purchases of 1-4 unit dwellings). is 12,900 for geo 99999999999, next closest is 
+    # ex: occupancy_investment_origination (originations for loans made for the purpose of investment purchases)
+```
+
