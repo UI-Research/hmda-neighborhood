@@ -19,6 +19,7 @@ library(tidyverse)
 library(here)
 library(skimr)
 library(arrow)
+library(tidylog, warn.conflicts = FALSE) # adding tidylog to check joins (TR, 12/5/2023)
 ```
 
 ```{r Metadata}
@@ -29,7 +30,8 @@ library(arrow)
 # renv::restore()
 
 #Update this value to the appropriate year
-year = "2019"
+#TR changed to 2022 for testing purposes, 12/5/2023
+year = "2022"
 
 #Relative path to the raw HMDA dataset (.parquet) - ~1.1 GB
 hmda_path = here("data-raw") %>% list.files(full.names = T) %>% str_match(paste0(".*", year, ".*\\.parquet")) %>% .[!is.na(.)] 
@@ -119,12 +121,13 @@ hmda_raw <- read_parquet(file = hmda_path, col_select = all_of(hmda_columns)) %>
     state_code = substr(county_code, 1, 2),
     
     # 00, 03, 07, and 80 are not state FIPS codes
-    # note that 60 = Americaon Samoa, 66 = Guam, 72 = PR, 78 = USVI
+    # note that 60 = American Samoa, 66 = Guam, 72 = PR, 78 = USVI
     county_code =  case_when(
       state_code %in% c("00", "03", "07", "80") ~ as.character(NA), 
-      TRUE ~ as.character(county_code))) #%>%
+      TRUE ~ as.character(county_code))) %>%
   ## For testing purposes only, uncomment this to run on a subset of all records
   # slice_sample(n = 10000)
+    filter(state_code == "01")
 ```
 
 ```{r Step 2 - Read Income Limits and Tract-Subcounty Crosswalk, cache = F}
@@ -224,7 +227,8 @@ tract_level_income_limits = geocorr_xwalk %>%
   ungroup() %>%
   select(census_tract, matches("income_limit")) %>%
   ## dropping records where census_tract is missing (these result from the full join)
-  filter(!is.na(census_tract))
+  filter(!is.na(census_tract)) %>% # uncomment pipe if testing on one specific state (TR, 12/5/2023)
+  filter(str_sub(census_tract,1,2) =="01") # uncomment if testing on one specific state (TR, 12/5/2023)
 ```
 
 ```{r Step 3 - Download ACS Data, cache = F}
@@ -601,7 +605,7 @@ hmda_combined <- hmda_flags %>%
     owner_loan_amount_median = if_else(standard_flag == 1, loan_amount, NA_real_)) %>%
   rename(owner_purchase_originations = standard_flag)
 
-rm(hmda_flags)
+#rm(hmda_flags)
 ```
 
 ```{r Step 7 - Summarize to Tract}
@@ -747,14 +751,44 @@ hmda_2021 <- read.csv("C:/Users/trajninger/Documents/TR/HMDA_Analysis/hmda-neigh
 hmda_2022 <- read.csv("C:/Users/trajninger/Documents/TR/HMDA_Analysis/hmda-neighborhood/data-final/hmda_tract_2022.csv", header=TRUE)
 
 options(scipen=999) # get rid of scientific notation
-# spot checks on final outputted datasets
-View(skimr::skim(hmda_2018))
-  # all variables are numeric
-  # all variables have minimum of 0 except owner_loan_amount_median
-  # all but 5 variables have 0 missing values
 
-  # quite a few variables have extreme outliers for the invalid geo (geo2010 == 99999999999). 
-    # ex: owner_purchase_originations (originations for first-lien owner-occupied home purchases of 1-4 unit dwellings). is 12,900 for geo 99999999999, next closest is 
-    # ex: occupancy_investment_origination (originations for loans made for the purpose of investment purchases)
+# spot checks on final outputted datasets
+  View(skimr::skim(hmda_2018))
+    # all variables are numeric
+    # all variables have minimum of 0 except owner_loan_amount_median
+    # all but 5 variables have 0 missing values
+  
+    # many variables have extreme outliers for the invalid geo (geo2010 == 99999999999). 
+    # this is the case for all final datasets, hmda_2018-hmda_2022. should probably remove this row as it may be misleading to users.
+      # is this row summing variable values for all missing geos?
+      # ex: for 2018, owner_purchase_originations (originations for first-lien owner-occupied purchases of 1-4 unit dwellings) is 12,900 for geo 99999999999, next closest is 1623
+      # ex: for 2018, occupancy_investment_origination (originations for loans made for the purpose of investment purchases). is 4628 for geo 99999999999, next closest is 429
+  
+  View(skimr::skim(hmda_2019))
+  View(skimr::skim(hmda_2020))
+  View(skimr::skim(hmda_2021))
+  View(skimr::skim(hmda_2022))
+  
+    # the datasets for each year (2018-2022) have same issue with significant outliers for many variables for the geo2010 == 99999999999
+
+# check code using subset of tracts in one state (Alabama)
+  # adjusted line 129 to include: filter(state_code == "01"), which filters only the raw data to census tracts in Alabama   
+  
+# check all joins
+  # 1. full join of county-to-tract geocorr crosswalk with income limits data (line 215)
+    # also need to subset tract_level_income_limits in line 231 to only Alabama
+    # there are 67 counties in Alabama and 1179 census tracts
+    # income limits in joined dataset (tract_level_income_limits) correspond to the specified income limits in income_limits_raw dataset for state of Alabama
+    # full_join added 5 columns (county_fips, income_limit_very_low, income_limit_low, income_limit_moderate, county_count), both datasets had "census_tract" and "join_key" vars.
+      # ended up removing 3 vars after the join: join_key, county_fips, county_count
+
+  # 2. merge tract_level_income_limits with national dataset subsetted to only Alabama census tracts, where state code is 01 (line 319)
+    #
+
+# do final outputs have missing data in the same place that ACS data
+# check all joins 
+# check vars that were summed, as well as median
+
+# add pipe to where we're reading in the raw data to create subset of all tracts just for 1 state
 ```
 
