@@ -307,7 +307,7 @@ hmda_geo <- hmda_raw %>%
       state_code %in% c("66", "72", "78") ~ paste0(county_code, "999999"),
       T ~ geo2010))
 
-rm(hmda_raw)
+#rm(hmda_raw)
 ```
 
 ```{r Step 5 - Merge Income Limits and Create Characteristic Flags}
@@ -487,7 +487,7 @@ hmda_flags <- hmda_geo %>%
       #Standard flag indicating when a record is for the purchase of a principal residence on a first lien of a 1-4 unit residential building with an originated loan 
       standard_flag = if_else(occupancy_principal_flag == 1 & purpose_purchase_flag == 1 & lien_firstlien_flag == 1 & units_1_4_flag == 1 & outcome_originated_flag == 1, 1, 0))
 
-rm(hmda_geo)
+#rm(hmda_geo)
 ```
 
 ```{r Step 6 - Create Combined Indicators}
@@ -666,8 +666,12 @@ hmda_tract <- hmda_combined %>%
         GEOID, 
         occupancy_unitsoccupied_count = housing_units_occupied_total,
         occupancy_owneroccupied_count = housing_units_occupied_owner,
-        occupancy_owneroccupied_percent),
-    by = c("geo2010" = "GEOID")) %>%
+        occupancy_owneroccupied_percent) %>%
+      
+      #TR added on 12/6/2023
+      rename(geo2010=GEOID),
+  # by = c("geo2010"="GEOID") TR slightly modified the "by" command
+    by = c(geo2010)) %>% # TR changed geo2010 to census_tract on 12/6/2023
   rename(missing_geo = missing_tract) %>% 
   arrange(geo2010) 
 ```
@@ -773,6 +777,26 @@ options(scipen=999) # get rid of scientific notation
 
 # check code using subset of tracts in one state (Alabama)
   # adjusted line 129 to include: filter(state_code == "01"), which filters only the raw data to census tracts in Alabama   
+  # look at hmda_raw and compare to output data (e.g., hmda_2022) for a few vars
+    # hmda_2022 has 1493 unique census tracts, hmda_raw has 1427 unique census tracts
+  # spot check raw data by comparing to calculations in final data for several census tracts. checked for variety of census tracts across the years.
+  # check vars that were summed or where we took median
+    # checked that, for several sample census tracts, the number of owner_purchase_originations was correct. compared output of below code with value in final dataset
+      # ex code: sum(hmda_raw$census_tract=="01081041300" & hmda_raw$action_taken==1 & hmda_raw$loan_purpose==1 & hmda_raw$lien_status==1 & hmda_raw$occupancy_type==1, na.rm=TRUE) 
+    # checked that occupancy_investment_origination was correct
+      # ex code: sum(hmda_raw$census_tract=="01071950400" & hmda_raw$action_taken==1 & hmda_raw$loan_purpose==1 & hmda_raw$lien_status==1 & hmda_raw$occupancy_type==3, na.rm=TRUE)
+    # checked that race_xxxx_purchase variables are correct
+      # ex: for tract, 1071950400, there are 9 white purchases and 4 purchases with missing race data 
+      # table(hmda_raw$applicant_race_1[hmda_raw$census_tract=="01071950400" & hmda_raw$action_taken==1 & hmda_raw$loan_purpose==1 & 
+            # hmda_raw$lien_status==1 & hmda_raw$occupancy_type==1])
+      # result is 9 for race 5 (white) and 4 for race 6 (information not provided by applicant)
+      # correct because in final data, race_white_purchase=9 and race_missing_purchase=4
+    # checked median income for several census tracts
+      # ex: median(hmda_raw$income[hmda_raw$census_tract=="01081041300" & hmda_raw$action_taken==1 & hmda_raw$loan_purpose==1 & hmda_raw$lien_status==1 & hmda_raw$occupancy_type==1],
+                  # na.rm=T)
+    # checked owner_loan_amounts -- final data has medians
+      # ex: median(hmda_raw$loan_amount[hmda_raw$census_tract=="01081041802" & hmda_raw$action_taken==1 & hmda_raw$loan_purpose==1 & hmda_raw$lien_status==1 &
+                #  hmda_raw$occupancy_type==1], na.rm=T)
   
 # check all joins
   # 1. full join of county-to-tract geocorr crosswalk with income limits data (line 215)
@@ -782,13 +806,23 @@ options(scipen=999) # get rid of scientific notation
     # full_join added 5 columns (county_fips, income_limit_very_low, income_limit_low, income_limit_moderate, county_count), both datasets had "census_tract" and "join_key" vars.
       # ended up removing 3 vars after the join: join_key, county_fips, county_count
 
-  # 2. merge tract_level_income_limits with national dataset subsetted to only Alabama census tracts, where state code is 01 (line 319)
-    #
+  # 2. merge tract_level_income_limits with national raw dataset (hmda_geo) subsetted to only Alabama census tracts, where state code is 01 (line 319)
+    # result: hmda_flags dataset, which includes flags for race, ethnicity, sex, age
+    # added the 3 income limit vars from tract_level_income_limits
+    # length(unique(hmda_geo$census_tract)); length(unique(hmda_flags$census_tract)); length(unique(tract_level_income_limits$census_tract))
+      # same number of unique census tracts as there were in national raw dataset (hmda_geo): 1427
+      # but the tract_level_income_limits dataset had different number of unique tracts: 1179 
+        # makes sense because for census tracts without income limits data, we used the mean of county's income limits
+  
+  # 3. after creating a dataset with the combined indicators (hmda_combined), we join with the two ACS housing vars (line 659)
+    # hmda_tract = joined dataset, turned back into tibble in line 683 (called hmda_final)
+    # the join added 3 more vars (2 from acs_housing + one percent var that we created in code)
+      # occupancy_owneroccupied_percent, occupancy_unitsoccupied_count, occupancy_owneroccupied_count
+    # acs_housing dataset contributes 1181 unique census tract ids
+    # hmda_combined contributes 1427 unique census tract ids
+    # need to make sure that these 246 census tract ids that were in hmda_combined and not in acs_housing are coded as NAs
+      # WRITE CODE FOR THIS
 
 # do final outputs have missing data in the same place that ACS data
-# check all joins 
-# check vars that were summed, as well as median
-
-# add pipe to where we're reading in the raw data to create subset of all tracts just for 1 state
 ```
 
