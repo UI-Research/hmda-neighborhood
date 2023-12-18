@@ -29,7 +29,7 @@ library(arrow)
 # renv::restore()
 
 #Update this value to the appropriate year
-year = "2019"
+year = "2021"
 
 #Relative path to the raw HMDA dataset (.parquet) - ~1.1 GB
 hmda_path = here("data-raw") %>% list.files(full.names = T) %>% str_match(paste0(".*", year, ".*\\.parquet")) %>% .[!is.na(.)] 
@@ -41,13 +41,18 @@ income_limits_path <- here("data-raw", "income-limits", paste0("Section8-FY", st
 #Path to codebook (.xlsx)
 codebook_path = here("Urban-HMDA_neighborhood_data_codebook_external.xlsx")
 
-#Path to subcounty-to-tract crosswalk from geocorr (.csv) 
-geocorr_xwalk_path = here("data-raw", "geocorr_subcounty_tract_landarea_2018.csv")
+#Path to subcounty-to-tract crosswalk from geocorr for 2010-based geographies (.csv) 
+#To be used with HMDA data up until 2022
+if (as.numeric(year) < 2022) {
+  geocorr_xwalk_path = here("data-raw", "geocorr_subcounty_tract_landarea_2018.csv") ## 2018 is the year of the geocorr application
+} else { geocorr_xwalk_path = here("data-raw", "geocorr_subcounty_tract_landarea_2022.csv") } ## 2022 is the year of the geocorr application
 
-## in cases where the ACS year would use 2020 Census tract geographies, instead
-## use 2019 as the ACS data year
+## in cases where the ACS year would use 2020 Census tract geographies, but HMDA data are still
+## reported in 2010 Census tract geographies, use 2019 as the ACS data year
+## for years after 
 acs_year = year
-if ((year %>% as.numeric) > 2019) { acs_year = "2019"}
+if (year %in% c("2020", "2021")) { acs_year = "2019"}
+if ((year %>% as.numeric) > 2021) { acs_year = (lubridate::year(Sys.Date()) - 2) %>% as.character }
 
 #Path to locally-saved ACS data (csv)
 acs_file_path = here("data-raw", paste0("acs_5yr_", acs_year, "_owner_occupied_housing.csv"))
@@ -61,7 +66,6 @@ if ( !file.exists(codebook_path) ) { stop(paste0("There is no codebook at the de
 
 print(paste0("Running this script where 'year' = ", year, " and 'acs_year' = ", acs_year, "."))
 ```
-
 ```{r Step 1 - Read Raw HMDA Data, cache = F}
 # Read national HMDA file
 starttime <- Sys.time()
@@ -122,8 +126,9 @@ hmda_raw <- read_parquet(file = hmda_path, col_select = all_of(hmda_columns)) %>
     # note that 60 = Americaon Samoa, 66 = Guam, 72 = PR, 78 = USVI
     county_code =  case_when(
       state_code %in% c("00", "03", "07", "80") ~ as.character(NA), 
-      TRUE ~ as.character(county_code))) #%>%
-  ## For testing purposes only, uncomment this to run on a subset of all records
+      TRUE ~ as.character(county_code))) %>%
+  ## For testing purposes only, un-comment this to run on a subset of all records
+  # arrange(county_code) %>%
   # slice_sample(n = 10000)
 ```
 
@@ -156,53 +161,69 @@ income_limits_raw <- read_csv(income_limits_path) %>%
   mutate(join_key = if_else(county_count > 1, state_subcounty_code, county_fips)) %>%
   select(join_key, county_fips, matches("income_limit"), county_count)
 
-## For county 29055 in the income limits data, there are two records with invalid fips2010 values
-## We assign to all tracts in the county the mean of these incomes limits (since we can't join to the county subdivision).  
-# replace_29055 = income_limits_raw %>%
-#   filter(county_fips == "29055") %>%
-#   group_by(county_fips) %>%
-#   summarise(across(where(is.numeric), first)) %>%
-#   mutate(county_count = 1, join_key = "29055")
-# 
-# income_limits_cleaned = income_limits_raw %>%
-#   filter(county_fips != "29055") %>%
-#   bind_rows(replace_29055)
-
 ## income limits vary at a subcounty geography for some counties
 ## to accurately join these income limits to tracts (at which we're calculating HMDA characteristics)
 ## we leverage a subcounty-to-tract crosswalk obtained from geocorr: https://mcdc.missouri.edu/applications/geocorr2018.html
 ## we then assign to each tract the income limit for the subcounty geography that most overlaps with that tract by land area
 ## as reflected in the "afact" column
-geocorr_xwalk = read_csv(geocorr_xwalk_path) %>%
-  ## cleaning up names
-  rename(
-    county_fips = county, 
-    subcounty_fips = cousubfp,
-    county_name = cntyname, 
-    subcounty_name = cousubnm,
-    land_area_mi = LandSQMI,
-    subcounty_tract_allocation_factor = afact) %>%
-  slice(2:nrow(.)) %>% # dropping a row with variable labels
-  mutate(
-    census_tract = paste0(county_fips, tract) %>% str_remove_all("\\."), ## cleaning tract codes for joining
-    subcounty_tract_allocation_factor = subcounty_tract_allocation_factor %>% as.numeric) %>% # converting to numeric
-  # sort by the area of the intersection between the tract and subcounty, then group_by census_tract and select the first row
-  # this selects the subcounty that has the greatest land-area-overlap with the tract
-  group_by(census_tract) %>%
-  arrange(desc(land_area_mi)) %>%
-  summarise(across(everything(), first)) %>%
-  mutate(
-    fips2010 = paste0(county_fips, subcounty_fips),
-    join_key = if_else(county_fips %in% ( income_limits_raw %>% filter(county_count == 1) %>% pull(county_fips) ), county_fips, fips2010),
-    join_key = case_when(
-      ## This county doesn't exist in the income limits data (because the county ceased to exist)
-      ## The current county code for this area is 51019.
-      str_detect(join_key,"^51515") ~ "51019",
-      ## For county 29055 in the income limits data, there are two records with invalid fips2010 values
-      ## We assign to all tracts in the county the mean of these incomes limits (since we can't join to the county subdivision). 
-      str_detect(join_key, "^29055") ~ "29055",
-      T ~ join_key)) %>%
-  select(census_tract, join_key)
+## as of 2022 data, HMDA has shifted to using 2020-vintage census tract geographies
+## these necessitate a different crosswalk
+
+## For years pre-2022
+if (as.numeric(year) < 2022) {
+  geocorr_xwalk = read_csv(geocorr_xwalk_path) %>%
+    ## cleaning up names
+    rename(
+      county_fips = county, 
+      subcounty_fips = cousubfp,
+      county_name = cntyname, 
+      subcounty_name = cousubnm,
+      land_area_mi = LandSQMI,
+      subcounty_tract_allocation_factor = afact) %>%
+    slice(2:nrow(.)) %>% # dropping a row with variable labels
+    mutate(
+      census_tract = paste0(county_fips, tract) %>% str_remove_all("\\."), ## cleaning tract codes for joining
+      subcounty_tract_allocation_factor = subcounty_tract_allocation_factor %>% as.numeric) %>% # converting to numeric
+    # sort by the area of the intersection between the tract and subcounty, then group_by census_tract and select the first row
+    # this selects the subcounty that has the greatest land-area-overlap with the tract
+    group_by(census_tract) %>%
+    arrange(desc(land_area_mi)) %>%
+    summarise(across(everything(), first)) %>%
+    mutate(
+      fips2010 = paste0(county_fips, subcounty_fips),
+      join_key = if_else(county_fips %in% ( income_limits_raw %>% filter(county_count == 1) %>% pull(county_fips) ), county_fips, fips2010),
+      join_key = case_when(
+        ## This county doesn't exist in the income limits data (because the county ceased to exist)
+        ## The current county code for this area is 51019.
+        str_detect(join_key,"^51515") ~ "51019",
+        ## For county 29055 in the income limits data, there are two records with invalid fips2010 values
+        ## We assign to all tracts in the county the mean of these incomes limits (since we can't join to the county subdivision). 
+        str_detect(join_key, "^29055") ~ "29055",
+        T ~ join_key)) %>%
+    select(census_tract, join_key) } else {
+      
+  ## For years 2022-onwards
+  geocorr_xwalk = read_csv(geocorr_xwalk_path) %>%
+    ## cleaning up names
+    rename(
+      county_fips = county, 
+      subcounty_fips = cousub20,
+      county_name = CountyName, 
+      subcounty_name = MCDName,
+      land_area_mi = LandSQMI,
+      subcounty_tract_allocation_factor = afact) %>%
+    slice(2:nrow(.)) %>% # dropping a row with variable labels
+    mutate(
+      census_tract = paste0(county_fips, tract) %>% str_remove_all("\\."), ## cleaning tract codes for joining
+      subcounty_tract_allocation_factor = subcounty_tract_allocation_factor %>% as.numeric) %>%
+    group_by(census_tract) %>%
+    arrange(desc(land_area_mi)) %>%
+    summarise(across(everything(), first)) %>%
+    mutate(
+      fips2010 = paste0(county_fips, subcounty_fips),
+      join_key = if_else(county_fips %in% (income_limits_raw %>% filter(county_count == 1) %>% pull(county_fips) ), county_fips, fips2010)) %>%
+    select(census_tract, join_key)
+  }
 
 ## join income limits to the tract-to-subcounty-division crosswalk so that we can
 ## then associate hmda data (at the tract level) with applicable income limits
@@ -230,20 +251,6 @@ tract_level_income_limits = geocorr_xwalk %>%
 ```{r Step 3 - Download ACS Data, cache = F}
 # Load state and county codes using {tigris} package
 print(paste("Step 3: Download ACS data:", Sys.time()))
-
-# I don't think we need this...
-# # Reading in state and county codes
-# states_tigris <- tigris::fips_codes %>%
-#   # Creating a combined state + county code for joining purposes
-#   unite(county_fips, state_code, county_code, sep = "", remove = F) %>%
-#   # Dropping unneeded columns
-#   select(state_name, county_fips)
-
-## Note: 2021 HMDA data use 2010 census tract definitions, per this source:
-## consumerfinance.gov/data-research/hmda/summary-of-201-data-on-mortgage-lending
-## If and when HMDA data are updated to 2020 census tract vintages, this code will
-## need to be adjusted (to use the most current 5-year ACS data); an updated version of 
-## the tract-subcounty crosswalk will also be needed
 
 #If data is saved locally, then read in from the local path
 #Otherwise, use the {tidycensus} package to query the Census API
@@ -290,21 +297,40 @@ hmda_geo <- hmda_raw %>%
     geo2010 = case_when(
       # If Census tract is valid then geo2010 is the input census tract
       missing_tract == 0 ~ as.character(census_tract),
-      # If the tract is missing but the county is valid then code as state + county + 000000
-      missing_tract == 1 & missing_county == 0 ~ as.character(paste0(county_code, "000000")),
-      # If the tract and county are missing then code as state + 000000000
-      missing_tract == 1 & missing_county == 1 & !is.na(state_code) ~ as.character(paste0(state_code, "000000000")),
-      # If the geography is completely invalid, use 99999999999
-      TRUE ~ "99999999999"),
+      # If the tract is missing but the county is valid then code as state + county + XXXXXX
+      missing_tract == 1 & missing_county == 0 ~ as.character(paste0(county_code, "XXXXXX")),
+      # If the tract and county are missing then code as state + XXXXXXXXX
+      missing_tract == 1 & missing_county == 1 & !is.na(state_code) ~ as.character(paste0(state_code, "XXXXXXXXX")),
+      # If the geography is completely invalid, use XXXXXXXXXXX
+      TRUE ~ "XXXXXXXXXXX"),
     ## if the tract is in Guam, the PR, or the USVI, replace with pseudo-code
     ## because these aren't contained in the tract-subcounty crosswalk (but we want to 
     ## retain them)
     geo2010 = case_when(
-      state_code %in% c("66", "72", "78") ~ paste0(county_code, "999999"),
+      state_code %in% c("66", "72", "78") ~ paste0(county_code, "XXXXXX"),
       T ~ geo2010))
 
 rm(hmda_raw)
 ```
+
+```{r Step 4.5 - Check Income Limits Join}
+## Some tracts don't join because of changes over time in tract boundaries
+## or because the tract codes are incorrect in the HMDA data. 
+## If, however, many are missing income limits data, the process of joining 
+## income limits hasn't gone correctly. 
+tracts_missing_income_limits = hmda_geo %>%
+  left_join(tract_level_income_limits, by = c("geo2010" = "census_tract")) %>%
+  filter(
+    if_any(.cols = matches("income_limit"), .fn = ~ is.na(.x)),
+    !state_code %in% c("66", "72", "78")) %>% ## dropping tracts from Guam / PR / USVI
+  ## these don't have tract, so the income limits don't join
+  add_count(census_tract) %>%
+  distinct(census_tract, .keep_all = T)
+
+if (nrow(tracts_missing_income_limits) > 100) { 
+  stop("More than 100 tracts have missing income limits.")}
+```
+
 
 ```{r Step 5 - Merge Income Limits and Create Characteristic Flags}
 # Merge income limit data and create characteristic flags
@@ -313,7 +339,7 @@ print(paste("Step 5: Merge income limit data and create characteristic flags:", 
 
 hmda_flags <- hmda_geo %>%
     left_join(tract_level_income_limits, by = c("geo2010" = "census_tract")) %>%
-    # Imputing with the county mean income limits when there's a valid county code but not a valid census code
+    # Imputing with the county mean income limits when there's a valid county code but not a valid tract code
     lazy_dt() %>% #converting to a data.table to take advantage of dtplyr's speed
     group_by(county_code) %>%
     mutate(across(.cols = matches("income_limit"), ~ if_else(is.na(.x), mean(.x, na.rm = T), .x))) %>%
@@ -328,7 +354,7 @@ hmda_flags <- hmda_geo %>%
       income_verylow_flag = if_else(income <= income_limit_very_low, 1, 0),
       income_low_flag = if_else(income <= income_limit_low & income > income_limit_very_low, 1, 0),
       income_moderate_flag = if_else(income <= income_limit_moderate & income > income_limit_low, 1, 0),
-      income_high_flag = if_else(income > income_limit_moderate, 1, 0), ## this is the old code, which looks incorrect: if_else(moderate <= income, 1, 0),
+      income_high_flag = if_else(income > income_limit_moderate, 1, 0), 
       income_available = if_else(income_missing_flag == 0, 1, 0), #Note - this is just the inverse of the income_missing_flag
           
       #Loan type flags
@@ -494,10 +520,10 @@ print(paste("Step 6: Create all combined indicators", Sys.time()))
 # This function creates final variables by taking any flag variables that are input
 # and checking that all conditions are equal to one
 create_var <- function(...) {
-  if_else(all(c(...) == 1), 1, 0)
-}
+  if_else(all(c(...) == 1), 1, 0) }
 
 hmda_combined <- hmda_flags %>%
+  rowwise() %>%
   mutate(
     #Occupancy - investment
     occupancy_investment_origination = create_var(occupancy_investment_flag, lien_firstlien_flag, outcome_originated_flag),
@@ -599,6 +625,7 @@ hmda_combined <- hmda_flags %>%
     #Note: these aren't median values -- these are summarized to tract-level medians in a subsequent step
     income_median = if_else(standard_flag == 1, income, NA_real_), 
     owner_loan_amount_median = if_else(standard_flag == 1, loan_amount, NA_real_)) %>%
+  ungroup() %>%
   rename(owner_purchase_originations = standard_flag)
 
 rm(hmda_flags)
@@ -721,6 +748,11 @@ dataset_variables_missing_from_codebook = colnames(hmda_final)[!(colnames(hmda_f
 if ( (nrow(failed_quality_checks) > 0) |  (nrow(codebook_variables_missing_from_dataset) > 0) | (length(dataset_variables_missing_from_codebook) > 0) ) { 
   warning("Not all quality checks passed!") } else { 
     warning("All quality checks passed!") }
+
+## Lastly, rename the census tract variable to distinguish between 2010-vintage
+## tracts and 2020-vintage tracts
+hmda_final = hmda_final %>%
+  { if (as.numeric(year) > 2021) rename(., geo2020 = geo2010) else . }
 ```
 
 ```{r Step 9 - Export Data}
