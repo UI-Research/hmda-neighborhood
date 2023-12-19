@@ -5,9 +5,14 @@
 
 *.html
 
+data-raw/
+data-final/
+_archive/
+
 data-raw/*
 data-final/*
 _archive/*
 
 *lar*
 
+Thumbs.db

@@ -45,27 +45,6 @@ raw_hmda_to_parquet = function(year, inpath = NULL, delimit_character = "|", out
     )
   }
   
-  ## Note: 2017 data are missing column names and even after adding them,
-  ## many columns used in our data summarization workflow are missing. 
-  # if (year == 2017) {
-  #   df = read_delim(inpath, delim = delimit_character)
-  #   df_2017_column_names = read_csv(here("data-raw", "hmda_lar_2017_column_names.csv"))
-  #   colnames(df) = df_2017_column_names %>% pull(Field)
-  #   df2 = df %>% 
-  #     janitor::clean_names() %>%
-  #     rename(
-  #       census_tract = census_tract_number,
-  #       income = applicant_income_000s,
-  #       loan_amount = loan_amount_000s,
-  #       action_taken = action_type, 
-  #       derived_dwelling_category = , ## no equivalent
-  #       applicant_ethnicity_1 = applicant_ethnicity,
-  #       co_applicant_ethnicity_1 = co_applicant_ethnicity,
-  #       derived_sex = , ## no equivalent
-  #       applicant_age = , ## no equivalent
-  #       co_applicant_age = ) ## no equivalent
-  #     select(all_of(subsetted_columns))}
-  
   ## a quick test prior to reading in full file
   raw_txt_test_delimit_character = tryCatch(
     { read_delim(inpath, delim = delimit_character, n_max = 5) },
@@ -88,6 +67,7 @@ raw_hmda_to_parquet = function(year, inpath = NULL, delimit_character = "|", out
   write_parquet(raw_text_subsetted, sink = outpath)
   
 }
+
 # raw_hmda_to_parquet(year = 2022) # ~5.9GB to ~375MB
 # raw_hmda_to_parquet(year = 2021) # ~10GB to ~1.1GB
 # raw_hmda_to_parquet(year = 2020) # ~9.8GB to ~375MB
