@@ -1,18 +1,15 @@
 *lar.txt
+*lar*
+
 .Rhistory
 *.DS_Store
 .Rproj.user
 
 *.html
 
-data-raw/
+data-raw/_archive/
+data-raw/raw*
 data-final/
 _archive/
-
-data-raw/*
-data-final/*
-_archive/*
-
-*lar*
 
 Thumbs.db

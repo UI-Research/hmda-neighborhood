@@ -1,7 +1,8 @@
 ---
 title: "Neighborhood Indicators from Home Mortgage Disclosure Act (HMDA) Data"
 output: html_document
-date: '2023-11-08'
+date: '2023-12-20'
+authors: "Rob Pitingolo, Will Curran-Groome, Tomi Rajninger"
 ---
 
 ```{r setup, include = FALSE}
@@ -39,7 +40,7 @@ hmda_path = here("data-raw") %>% list.files(full.names = T) %>% str_match(paste0
 income_limits_path <- here("data-raw", "income-limits", paste0("Section8-FY", str_sub(year, 3, 4), ".csv"))
 
 #Path to codebook (.xlsx)
-codebook_path = here("Urban-HMDA_neighborhood_data_codebook_external.xlsx")
+codebook_path = here("UrbanInstitute_HMDA_neighborhood_data_codebook.xlsx")
 
 #Path to subcounty-to-tract crosswalk from geocorr for 2010-based geographies (.csv) 
 #To be used with HMDA data up until 2022
@@ -56,7 +57,6 @@ if ((year %>% as.numeric) > 2021) { acs_year = (lubridate::year(Sys.Date()) - 2)
 
 #Path to locally-saved ACS data (csv)
 acs_file_path = here("data-raw", paste0("acs_5yr_", acs_year, "_owner_occupied_housing.csv"))
-
 
 ## create a folder for data outputs if it doesn't exist
 if (!dir.exists(here("data-final"))) { dir.create(here("data-final")) }
@@ -131,12 +131,10 @@ hmda_raw <- read_parquet(file = hmda_path, col_select = all_of(hmda_columns)) %>
     # note that 60 = Americaon Samoa, 66 = Guam, 72 = PR, 78 = USVI
     county_code =  case_when(
       state_code %in% c("00", "03", "07", "80") ~ as.character(NA), 
-      TRUE ~ as.character(county_code))) #%>%
+      TRUE ~ as.character(county_code))) %>%
   ## For testing purposes only, un-comment this to run on a subset of all records
-  # arrange(county_code) %>%
-  # slice_sample(n = 10000)
-
-#hmda_raw = hmda_raw1 %>% filter(state_code == "01")
+  arrange(county_code) %>%
+  slice_sample(n = 1000)
 ```
 
 ```{r Step 2 - Read Income Limits and Tract-Subcounty Crosswalk, cache = F}
@@ -317,7 +315,7 @@ hmda_geo <- hmda_raw %>%
       state_code %in% c("66", "72", "78") ~ paste0(county_code, "XXXXXX"),
       T ~ geo2010))
 
-rm(hmda_raw)
+#rm(hmda_raw)
 ```
 
 ```{r Step 4.5 - Check Income Limits Join}
@@ -724,7 +722,10 @@ hmda_final <- hmda_tract %>%
   mutate(invalid_geo = if_else(missing_geo > 0, 1, 0)) %>%
   select(-missing_geo) %>% 
   ## converting from a data.table back to a tibble
-  as_tibble()
+  as_tibble() %>%
+  ## Lastly, rename the census tract variable to distinguish between 2010-vintage
+  ## tracts and 2020-vintage tracts 
+  { if (as.numeric(year) > 2021) rename(., geo2020 = geo2010) else . }
 
 ## check to ensure all variables have non-zero values in some tracts
 #skimr::fix_windows_histograms() ## if histograms do not render correctly, use this function and re-run
@@ -760,7 +761,12 @@ codebook = readxl::read_xlsx(codebook_path, sheet = 2)
 ## check to ensure that there aren't any variables in the codebook
 ## that aren't in the final dataset. this should return a dataframe with no rows.
 codebook_variables_missing_from_dataset = codebook %>%
-  filter(!(`Name - 2021` %in% (colnames(hmda_final))))
+  filter(
+    !(`Field name` %in% (colnames(hmda_final))),
+    ## in a given year, one of these will not be present in colnames(hmda_final)
+    ## because the name is used to differentiated between the vintage of the census tract
+    ## across years of hmda data
+    !`Field name` %in% c("geo2010", "geo2020"))  
 
 ## check to ensure there aren't any columns in the codebook
 ## that aren't in the final dataset. this should return an empty character vector.
@@ -769,11 +775,6 @@ dataset_variables_missing_from_codebook = colnames(hmda_final)[!(colnames(hmda_f
 if ( (nrow(failed_quality_checks) > 0) |  (nrow(codebook_variables_missing_from_dataset) > 0) | (length(dataset_variables_missing_from_codebook) > 0) ) { 
   warning("Not all quality checks passed!") } else { 
     warning("All quality checks passed!") }
-
-## Lastly, rename the census tract variable to distinguish between 2010-vintage
-## tracts and 2020-vintage tracts
-hmda_final = hmda_final %>%
-  { if (as.numeric(year) > 2021) rename(., geo2020 = geo2010) else . }
 ```
 
 ```{r Step 9 - Export Data}
