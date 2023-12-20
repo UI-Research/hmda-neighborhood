@@ -1,5 +1,7 @@
 # Home Mortgage Disclosure Act Neighborhood Summary Files: Census Tract Level
 
+**Authors:** [Rob Pitingolo](mailto:rpitingolo@urbnan.org), [Will Curran-Groome](mailto:wcurrangroome@urban.org), and [Tomi Rajninger](mailto:trajninger@urban.org)
+
 "The US government collects and distributes an enormous database with information about US mortgages called the Home Mortgage Disclosure Act (HMDA) data. The HMDA dataset contains the most comprehensive publicly available information on mortgage market activity. Each fall, new HMDA data are made available. In 2016, almost 7,000 institutions released over 16 million records, making HMDA an invaluable administrative dataset on housing and homeownership for policymakers, regulators, and researchers." -- [Urban Institute's Housing Finance Policy Center](https://www.urban.org/policy-centers/housing-finance-policy-center/projects/home-mortgage-disclosure-act-data)
 
 While these data are extremely useful, they are also very detailed: each record in the dataset reflects details about an individual mortgage application. As a result, the unprocessed dataset is very large, and for many audiences, the data are too complex to enable them to answer questions of interest. For example, the raw data for 2021 contains 26 million records and is approximately 10 gigabytes in size. This project derives census-tract level statistics from the unprocessed HMDA dataset to make the data more useful and accessible to a wider audience.
@@ -20,7 +22,7 @@ This repository contains code for collecting, reformatting, and processing the H
 
 The source data is from the [Snapshot National Loan-Level Datasets published by FFIEC](https://ffiec.cfpb.gov/data-publication/snapshot-national-loan-level-dataset/2022), while income limits are taken from [the HUDUser website.](#0) To join income limits--which are specified at the county and subcounty levels--to census tracts, we use crosswalks from the [Missouri Data Center's Geocorr application.](https://mcdc.missouri.edu/applications/geocorr2022.html) Both income limits and crosswalks are included in this repository in the `/data-raw/` folder.
 
-## Reproducing 
+## Reproducing
 
 -   Download the Dynamic National Loan-Level Datasets from the FFEIC website;
 
