@@ -68,6 +68,7 @@ raw_hmda_to_parquet = function(year, inpath = NULL, delimit_character = "|", out
   
 }
 
+# raw_hmda_to_parquet(year = 2022) # ~4.2GB to ~375MB
 # raw_hmda_to_parquet(year = 2022) # ~5.9GB to ~375MB
 # raw_hmda_to_parquet(year = 2021) # ~10GB to ~1.1GB
 # raw_hmda_to_parquet(year = 2020) # ~9.8GB to ~375MB
