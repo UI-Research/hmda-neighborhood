@@ -1,14 +1,10 @@
-*lar.txt
-*lar*
-
 .Rhistory
 *.DS_Store
 .Rproj.user
 
 *.html
 
-data-raw/_archive/
-data-raw/raw*
+data-raw/
 data-final/
 _archive/
 
