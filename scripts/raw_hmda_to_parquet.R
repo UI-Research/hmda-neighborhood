@@ -58,7 +58,7 @@ raw_hmda_to_parquet = function(year, inpath = NULL, delimit_character = "|", out
   ## a callback function to read the full file in chunks
   read_chunk_callback = function(x, cols) { x %>% select(all_of(subsetted_columns)) }
   
-  ## reading the fule in chunks
+  ## reading the file in chunks
   raw_text_subsetted = tryCatch(
     { read_delim_chunked(inpath, delim = delimit_character, callback = DataFrameCallback$new(read_chunk_callback), chunk_size = 100000) },
     error = function(e) { stop(e)})
@@ -68,9 +68,10 @@ raw_hmda_to_parquet = function(year, inpath = NULL, delimit_character = "|", out
   
 }
 
-# raw_hmda_to_parquet(year = 2022) # ~4.2GB to ~375MB
-# raw_hmda_to_parquet(year = 2022) # ~5.9GB to ~375MB
-# raw_hmda_to_parquet(year = 2021) # ~10GB to ~1.1GB
-# raw_hmda_to_parquet(year = 2020) # ~9.8GB to ~375MB
-# raw_hmda_to_parquet(year = 2019) # ~6.5GB to ~260 MB
-# raw_hmda_to_parquet(year = 2018) # ~5.7GB to ~220 MB
+# raw_hmda_to_parquet(year = 2023) # ~4 GB to ~149 MB
+# raw_hmda_to_parquet(year = 2022) # ~4.2 GB to ~375 MB
+# raw_hmda_to_parquet(year = 2022) # ~5.9 GB to ~375 MB
+# raw_hmda_to_parquet(year = 2021) # ~10 GB to ~1.1 GB
+# raw_hmda_to_parquet(year = 2020) # ~9.8 GB to ~375 MB
+# raw_hmda_to_parquet(year = 2019) # ~6.5 GB to ~260 MB
+# raw_hmda_to_parquet(year = 2018) # ~5.7 GB to ~220 MB
