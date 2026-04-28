@@ -20,6 +20,7 @@ library(tidyverse)
 library(here)
 library(skimr)
 library(arrow)
+library(readxl)
 ```
 
 ```{r Metadata}
@@ -30,14 +31,32 @@ library(arrow)
 # renv::restore()
 
 #Update this value to the appropriate year
-year = "2018"
+year = "2024"
 
-#Relative path to the raw HMDA dataset (.parquet) - ~1.1 GB
-hmda_path = here("data-raw") %>% list.files(full.names = T) %>% str_match(paste0(".*", year, ".*\\.parquet")) %>% .[!is.na(.)] 
+#Testing toggle for running on a smaller HMDA sample
+test_mode = FALSE
+test_sample_n = 1000
 
-#Data source: https://www.huduser.gov/portal/datasets/il/il21/Section8-FY21.xlsx
-#Path to income limit data (csv):
-income_limits_path <- here("data-raw", "income-limits", paste0("Section8-FY", str_sub(year, 3, 4), ".csv"))
+#Specify raw HMDA filename (extension determines input format)
+hmda_filename = paste0(year, "_public_lar_csv", ".csv")
+hmda_input_format = tools::file_ext(hmda_filename) %>% tolower()
+if (!(hmda_input_format %in% c("parquet", "csv"))) {
+  stop("HMDA filename extension must be either '.parquet' or '.csv'.")
+}
+
+#Specify income limits filename (extension determines input format)
+#Data source: https://www.huduser.gov/portal/datasets/il.html
+income_limits_filename = paste0("Section8-FY", str_sub(year, 3, 4), ".xlsx")
+income_limits_input_format = tools::file_ext(income_limits_filename) %>% tolower()
+if (!(income_limits_input_format %in% c("csv", "xlsx"))) {
+  stop("Income limits filename extension must be either '.csv' or '.xlsx'.")
+}
+
+#Path to the raw HMDA dataset
+hmda_path = here("data-raw", hmda_filename)
+
+#Path to income limits data
+income_limits_path <- here("data-raw", "income-limits", income_limits_filename)
 
 #Path to codebook (.xlsx)
 codebook_path = here("UrbanInstitute_HMDA_neighborhood_data_codebook.xlsx")
@@ -55,8 +74,12 @@ acs_year = year
 if (year %in% c("2020", "2021")) { acs_year = "2019"}
 if ((year %>% as.numeric) > 2021) { acs_year = (lubridate::year(Sys.Date()) - 2) %>% as.character }
 
+#Census tract geography vintage column name, based on year
+geo_col = if_else(as.numeric(year) > 2021, "geo2020", "geo2010")
+
 #Path to locally-saved ACS data (csv)
-acs_file_path = here("data-raw", paste0("acs_5yr_", acs_year, "_owner_occupied_housing.csv"))
+acs_file_path = here("data-raw", paste0("acs_5yr_", acs_year, "_owner_occupied_housing.csv")) ## Update filename if needed
+
 
 ## create a folder for data outputs if it doesn't exist
 if (!dir.exists(here("data-final"))) { dir.create(here("data-final")) }
@@ -68,7 +91,7 @@ if ( !file.exists(hmda_path) ) { stop(paste0("There is no HMDA data file at the 
 if ( !file.exists(income_limits_path) ) { stop(paste0("There is no income limits data file at the designated path: ", income_limits_path)) }
 if ( !file.exists(codebook_path) ) { stop(paste0("There is no codebook at the designated path: ", codebook_path)) }
 
-print(paste0("Running this script where 'year' = ", year, " and 'acs_year' = ", acs_year, "."))
+print(paste0("Running this script where 'year' = ", year, ", 'acs_year' = ", acs_year, ", 'hmda_filename' = ", hmda_filename, ", 'income_limits_filename' = ", income_limits_filename, ", and 'test_mode' = ", test_mode, "."))
 ```
 
 ```{r Step 1 - Read Raw HMDA Data, cache = F}
@@ -109,9 +132,14 @@ hmda_columns = c(
   "co_applicant_age",
   "purchaser_type")
 
-#Reading the HMDA parquet file
+#Reading the HMDA file
 #Only reading in the needed columns to limit file size
-hmda_raw <- read_parquet(file = hmda_path, col_select = all_of(hmda_columns)) %>%
+hmda_raw <-
+  if (hmda_input_format == "parquet") {
+    read_parquet(file = hmda_path, col_select = all_of(hmda_columns))
+  } else {
+    read_csv(file = hmda_path, col_select = all_of(hmda_columns), show_col_types = F)
+  } %>%
   mutate(
     #If the census tract is coded as "na" then switch to proper missing
     census_tract = case_when(
@@ -131,24 +159,34 @@ hmda_raw <- read_parquet(file = hmda_path, col_select = all_of(hmda_columns)) %>
     # note that 60 = Americaon Samoa, 66 = Guam, 72 = PR, 78 = USVI
     county_code =  case_when(
       state_code %in% c("00", "03", "07", "80") ~ as.character(NA), 
-      TRUE ~ as.character(county_code))) %>%
-  ## For testing purposes only, un-comment this to run on a subset of all records
-  arrange(county_code) %>%
-  slice_sample(n = 1000)
+      TRUE ~ as.character(county_code)))
+
+if (test_mode) {
+  hmda_raw <- hmda_raw %>%
+    arrange(county_code) %>%
+    slice_sample(n = test_sample_n)
+}
 ```
 
 ```{r Step 2 - Read Income Limits and Tract-Subcounty Crosswalk, cache = F}
 # Read income limits file and define max limits for each county
 print(paste("Step 2: Read income limits file and define max limits for each county:", Sys.time()))
 
-income_limits_raw <- read_csv(income_limits_path) %>%
+fips_var <- "fips"
+
+income_limits_raw <-
+  if (income_limits_input_format == "csv") {
+    read_csv(income_limits_path, show_col_types = F)
+  } else {
+    readxl::read_xlsx(income_limits_path)
+  } %>%
   janitor::clean_names() %>% 
   transmute(
-    state_code = str_sub(fips2010, 1, 2), ## two characters
-    county_code = str_sub(fips2010, 3, 5), ## three characters
+    state_code = str_sub(.data[[fips_var]], 1, 2), ## two characters
+    county_code = str_sub(.data[[fips_var]], 3, 5), ## three characters
     ## 10 characters -- state code plus county_code plus either five "9" characters
     ## (in the case that there is no subcounty unit) or the five-character subcounty code
-    state_subcounty_code = fips2010,
+    state_subcounty_code = .data[[fips_var]],
     #Create combined state + county code - five characters
     county_fips = paste0(state_code, county_code),
     #Very low income max (Under 50% AMI)
@@ -161,7 +199,7 @@ income_limits_raw <- read_csv(income_limits_path) %>%
   ## most counties have a single set of income limits that apply to the entire county
   ## however, some counties have multiple income limits, each of which corresponds to
   ## a county subdivision. we create a join key that equals either the county code ("county_fips")
-  ## or the county subdivision code ("fips2010") depending on the number of income limits for 
+  ## or the county subdivision code ("fips_var") depending on the number of income limits for 
   ## county ("county_count")
   mutate(join_key = if_else(county_count > 1, state_subcounty_code, county_fips)) %>%
   select(join_key, county_fips, matches("income_limit"), county_count)
@@ -299,8 +337,8 @@ hmda_geo <- hmda_raw %>%
     # Create flag variables for when the tract or county codes are missing
     missing_tract = case_when(is.na(census_tract) ~ 1, TRUE ~ 0), 
     missing_county = case_when(is.na(county_code) ~ 1, TRUE ~ 0),
-    geo2010 = case_when(
-      # If Census tract is valid then geo2010 is the input census tract
+    "{geo_col}" := case_when(
+      # If Census tract is valid then geo_col is the input census tract
       missing_tract == 0 ~ as.character(census_tract),
       # If the tract is missing but the county is valid then code as state + county + XXXXXX
       missing_tract == 1 & missing_county == 0 ~ as.character(paste0(county_code, "XXXXXX")),
@@ -311,11 +349,13 @@ hmda_geo <- hmda_raw %>%
     ## if the tract is in Guam, the PR, or the USVI, replace with pseudo-code
     ## because these aren't contained in the tract-subcounty crosswalk (but we want to 
     ## retain them)
-    geo2010 = case_when(
+    "{geo_col}" := case_when(
       state_code %in% c("66", "72", "78") ~ paste0(county_code, "XXXXXX"),
-      T ~ geo2010))
+      T ~ .data[[geo_col]]))
 
-#rm(hmda_raw)
+if (!test_mode) {
+  rm(hmda_raw)
+}
 ```
 
 ```{r Step 4.5 - Check Income Limits Join}
@@ -324,7 +364,7 @@ hmda_geo <- hmda_raw %>%
 ## If, however, many are missing income limits data, the process of joining 
 ## income limits hasn't gone correctly. 
 tracts_missing_income_limits = hmda_geo %>%
-  left_join(tract_level_income_limits, by = c("geo2010" = "census_tract")) %>%
+  left_join(tract_level_income_limits, by = setNames("census_tract", geo_col)) %>%
   filter(
     if_any(.cols = matches("income_limit"), .fn = ~ is.na(.x)),
     !state_code %in% c("66", "72", "78")) %>% ## dropping tracts from Guam / PR / USVI
@@ -343,7 +383,7 @@ if (nrow(tracts_missing_income_limits) > 100) {
 print(paste("Step 5: Merge income limit data and create characteristic flags:", Sys.time()))
 
 hmda_flags <- hmda_geo %>%
-    left_join(tract_level_income_limits, by = c("geo2010" = "census_tract")) %>%
+    left_join(tract_level_income_limits, by = setNames("census_tract", geo_col)) %>%
     # Imputing with the county mean income limits when there's a valid county code but not a valid tract code
     lazy_dt() %>% #converting to a data.table to take advantage of dtplyr's speed
     group_by(county_code) %>%
@@ -514,7 +554,10 @@ hmda_flags <- hmda_geo %>%
       #Standard flag indicating when a record is for the purchase of a principal residence on a first lien of a 1-4 unit residential building with an originated loan 
       standard_flag = if_else(occupancy_principal_flag == 1 & purpose_purchase_flag == 1 & lien_firstlien_flag == 1 & units_1_4_flag == 1 & outcome_originated_flag == 1, 1, 0))
 
-rm(hmda_geo)
+
+if (!test_mode) {
+  rm(hmda_geo)
+}
 ```
 
 ```{r Step 6 - Create Combined Indicators}
@@ -694,7 +737,7 @@ hmda_tract <- hmda_combined %>%
   ## particularly significant for this group_by %>% summarise workflow
   ## (dtplyr does not bring significant performance advantages for the steps above)
   lazy_dt() %>%
-  group_by(geo2010) %>% 
+  group_by(!!sym(geo_col)) %>% 
   summarise(
     across(all_of(final_vars), sum, na.rm = TRUE),
     across(matches("median"), median, na.rm = TRUE)) %>% 
@@ -709,9 +752,9 @@ hmda_tract <- hmda_combined %>%
         occupancy_unitsoccupied_count = housing_units_occupied_total,
         occupancy_owneroccupied_count = housing_units_occupied_owner,
         occupancy_owneroccupied_percent),
-    by = c("geo2010" = "GEOID")) %>%
+    by = setNames("GEOID", geo_col)) %>%
   rename(missing_geo = missing_tract) %>% 
-  arrange(geo2010) 
+  arrange(!!sym(geo_col)) 
 ```
 
 ```{r Step 8 - Final Cleanup and Quality Checks}
@@ -722,10 +765,7 @@ hmda_final <- hmda_tract %>%
   mutate(invalid_geo = if_else(missing_geo > 0, 1, 0)) %>%
   select(-missing_geo) %>% 
   ## converting from a data.table back to a tibble
-  as_tibble() %>%
-  ## Lastly, rename the census tract variable to distinguish between 2010-vintage
-  ## tracts and 2020-vintage tracts 
-  { if (as.numeric(year) > 2021) rename(., geo2020 = geo2010) else . }
+  as_tibble()
 
 ## check to ensure all variables have non-zero values in some tracts
 #skimr::fix_windows_histograms() ## if histograms do not render correctly, use this function and re-run
@@ -744,7 +784,7 @@ failed_quality_checks = hmda_final %>%
         race_multiple_purchase, race_mixed_purchase, race_aian_purchase)), na.rm = T),
     race_income_check = rowSums(across(c(matches("race.*income"), -matches("available|missing"))), na.rm = T),
     # all tract IDs should be 11 characters
-    tract_id_characters = nchar(geo2010),
+    tract_id_characters = nchar(.data[[geo_col]]),
     errors = case_when(
       age_check != age_available ~ "age check failed",
       income_check != income_available ~ "income check failed",
@@ -753,7 +793,7 @@ failed_quality_checks = hmda_final %>%
       tract_id_characters != 11 ~ "invalid tract id",
       T ~ NA_character_)) %>%
   filter(!is.na(errors)) %>%
-  select(errors, tract_id_characters, income_available, income_check,  matches("income"), -matches("race"), geo2010)
+  select(errors, tract_id_characters, income_available, income_check,  matches("income"), -matches("race"), all_of(geo_col))
 
 ## reading in the codebook
 codebook = readxl::read_xlsx(codebook_path, sheet = 2)
@@ -781,7 +821,9 @@ if ( (nrow(failed_quality_checks) > 0) |  (nrow(codebook_variables_missing_from_
 #Export final CSV
 print(paste("Step 9: Export CSV", Sys.time()))
 
-write_csv(hmda_final, output_path)
+if (!test_mode) {
+  write_csv(hmda_final, output_path)
+}
 
 #End time for log
 endtime <- Sys.time()
