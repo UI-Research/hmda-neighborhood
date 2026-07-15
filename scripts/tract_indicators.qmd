@@ -37,10 +37,10 @@ knitr::opts_chunk$set(
 ## year of data
 # 
 # source(here("scripts", "raw_hmda_to_parquet.R"))
-# 
+
 # raw_hmda_to_parquet(
-#   year = 2023,
-#   inpath = here("data-raw", "2023_public_lar_csv.csv"),
+#   year = 2025,
+#   inpath = here("data-raw", "2025_public_lar_csv.csv"),
 #   delimit_character = ",")
 ```
 
@@ -61,10 +61,12 @@ library(arrow)
 
 ```{r Metadata}
 #Update this value to the appropriate year
-year = "2023"
+year = "2025"
 
 #Relative path to the raw HMDA dataset (.parquet) - ~1.1 GB
-hmda_path = here("data-raw") %>% list.files(full.names = T) %>% str_match(paste0(".*", year, ".*\\.parquet")) %>% .[!is.na(.)] 
+hmda_path = here("data-raw") %>% 
+  list.files(full.names = T) %>% 
+  str_match(paste0(".*", year, ".*\\.parquet")) %>% .[!is.na(.)] 
 
 #Data source: https://www.huduser.gov/portal/datasets/il/il21/Section8-FY21.xlsx
 #Path to income limit data (csv):
@@ -173,10 +175,57 @@ hmda_raw <- read_parquet(file = hmda_path, col_select = all_of(hmda_columns)) %>
 print(paste("Step 2: Read income limits file and define max limits for each county:", Sys.time()))
 
 income_limits_raw <- read_csv(income_limits_path) %>%
-  janitor::clean_names() %>% 
+  janitor::clean_names() %>%
   ## in some years, this is called "fips2010", in others just "fips"
   ## we rename to "fips" for consistency
-  rename_with(.cols = matches("^fips"), .fn = ~ str_remove_all(.x, "[0-9]")) %>%
+  rename_with(.cols = matches("^fips"), .fn = ~ str_remove_all(.x, "[0-9]"))
+
+## Connecticut replaced its 8 legacy counties (state 09, counties 001-015) with 9
+## "planning regions" as county-equivalents (090 codes 110-190), effective with 2022-vintage
+## Census geographies. HMDA data reflects the new codes starting in 2024; HUD's income-limit
+## files didn't migrate until FY25; the geocorr crosswalk below was never updated and still
+## uses the legacy codes. Town-level fips codes are stable across the recode (only the county
+## portion changed, and not 1:1 -- e.g. old Fairfield County splits across three new regions),
+## so we build a town-level old-to-new crosswalk from HUD's own FY24 (legacy) and FY25
+## (already-recoded) files.
+if (as.numeric(year) >= 2024) {
+  ct_recode_paths = here("data-raw", "income-limits", c("Section8-FY24.csv", "Section8-FY25.csv"))
+  if (any(!file.exists(ct_recode_paths))) {
+    stop("Missing a reference file needed for the CT planning-region recode (Section8-FY24.csv / Section8-FY25.csv).")
+  }
+
+  ct_recode = read_csv(ct_recode_paths[1]) %>%
+    janitor::clean_names() %>%
+    rename_with(.cols = matches("^fips"), .fn = ~ str_remove_all(.x, "[0-9]")) %>%
+    filter(state == "09") %>%
+    transmute(
+      county_fips_old = str_sub(fips, 1, 5),
+      subcounty_fips = str_sub(fips, 6, 10)) %>%
+    distinct() %>%
+    left_join(
+      read_csv(ct_recode_paths[2]) %>%
+        janitor::clean_names() %>%
+        rename_with(.cols = matches("^fips"), .fn = ~ str_remove_all(.x, "[0-9]")) %>%
+        filter(state == "09") %>%
+        transmute(
+          county_fips_new = str_sub(fips, 1, 5),
+          subcounty_fips = str_sub(fips, 6, 10)) %>%
+        distinct(),
+      by = "subcounty_fips",
+      relationship = "one-to-one")
+
+  ## recode CT rows in income_limits_raw to the new planning-region codes, if not already
+  ## (this is a no-op once income_limits_path itself points at an FY25+ file)
+  income_limits_raw = income_limits_raw %>%
+    mutate(
+      county_fips_pre = str_sub(fips, 1, 5),
+      subcounty_fips = str_sub(fips, 6, 10)) %>%
+    left_join(ct_recode, by = c("county_fips_pre" = "county_fips_old", "subcounty_fips"), relationship = "many-to-one") %>%
+    mutate(fips = if_else(!is.na(county_fips_new), paste0(county_fips_new, subcounty_fips), fips)) %>%
+    select(-county_fips_pre, -subcounty_fips, -county_fips_new)
+}
+
+income_limits_raw = income_limits_raw %>%
   transmute(
     state_code = str_sub(fips, 1, 2), ## two characters
     county_code = str_sub(fips, 3, 5), ## three characters
@@ -239,9 +288,9 @@ if (as.numeric(year) < 2022) {
         ## We assign to all tracts in the county the mean of these incomes limits (since we can't join to the county subdivision). 
         str_detect(join_key, "^29055") ~ "29055",
         T ~ join_key)) %>%
-    select(census_tract, join_key) } else {
-      
-  ## For years 2022-onwards
+    select(census_tract, join_key) } else if (as.numeric(year) < 2024) {
+
+  ## For years 2022-2023, when CT county changes have yet to be implemented in HMDA data
   geocorr_xwalk = read_csv(geocorr_xwalk_path) %>%
     ## cleaning up names
     rename(
@@ -262,6 +311,44 @@ if (as.numeric(year) < 2022) {
       fips2010 = paste0(county_fips, subcounty_fips),
       join_key = if_else(county_fips %in% (income_limits_raw %>% filter(county_count == 1) %>% pull(county_fips) ), county_fips, fips2010)) %>%
     select(census_tract, join_key)
+  } else {
+
+  ## For years 2024-onwards, when HMDA data natively reflects 2022 CT county changes.
+  ## This geocorr file is the same 2022-vintage file used in the branch above -- CT
+  ## tract/town boundaries didn't move, only the county-level FIPS labeling did -- so we
+  ## recode county_fips for CT rows via ct_recode (built above, keyed on cousub20/
+  ## subcounty_fips, which is stable across the recode) before deriving census_tract, so
+  ## that census_tract and join_key come out already in new-vintage form.
+  geocorr_xwalk = read_csv(geocorr_xwalk_path) %>%
+    ## cleaning up names
+    rename(
+      county_fips = county,
+      subcounty_fips = cousub20,
+      county_name = CountyName,
+      subcounty_name = MCDName,
+      land_area_mi = LandSQMI,
+      subcounty_tract_allocation_factor = afact) %>%
+    slice(2:nrow(.)) %>% # dropping a row with variable labels
+    left_join(ct_recode, by = c("county_fips" = "county_fips_old", "subcounty_fips"), relationship = "many-to-one") %>%
+    mutate(
+      county_fips = if_else(!is.na(county_fips_new), county_fips_new, county_fips),
+      census_tract = paste0(county_fips, tract) %>% str_remove_all("\\."), ## cleaning tract codes for joining
+      subcounty_tract_allocation_factor = subcounty_tract_allocation_factor %>% as.numeric) %>%
+    group_by(census_tract) %>%
+    arrange(desc(land_area_mi)) %>%
+    summarise(across(everything(), first)) %>%
+    mutate(
+      fips2010 = paste0(county_fips, subcounty_fips),
+      join_key = if_else(county_fips %in% (income_limits_raw %>% filter(county_count == 1) %>% pull(county_fips) ), county_fips, fips2010)) %>%
+    select(census_tract, join_key)
+
+  ## defensive check: confirm the recode above didn't collide/drop CT tracts (there are
+  ## 879 as of the 2020 vintage) -- would indicate two old (county, tract) pairs mapping
+  ## to the same new (county, tract) pair
+  ct_tract_count = geocorr_xwalk %>% filter(str_detect(census_tract, "^09")) %>% nrow()
+  if (ct_tract_count < 800) {
+    stop("Fewer CT tracts than expected after the planning-region recode -- check for join collisions.")
+  }
   }
 
 ## join income limits to the tract-to-subcounty-division crosswalk so that we can
@@ -352,7 +439,7 @@ hmda_geo <- hmda_raw %>%
 # rm(hmda_raw)
 ```
 
-```{r Step 4.5 - Check Income Limits Join}
+```{r Step 4.5 - Check Income Limits Join and Verify CT Counties Persist}
 ## Some tracts don't join because of changes over time in tract boundaries
 ## or because the tract codes are incorrect in the HMDA data. 
 ## If, however, many are missing income limits data, the process of joining 
@@ -368,7 +455,16 @@ tracts_missing_income_limits = hmda_geo %>%
 
 if (nrow(tracts_missing_income_limits) > 100) { 
   stop("More than 100 tracts have missing income limits.")}
+
+## CT counties were redefined in 2022, though this isn't reflected in HMDA data until 2024
+## check to ensure that CT counties are not lost in the data prep pipeline
+stopifnot(
+    hmda_geo %>%
+    filter(str_detect(census_tract, "^09")) %>%
+    count(census_tract) %>%
+    nrow() > 700)
 ```
+
 
 
 ```{r Step 5 - Merge Income Limits and Create Characteristic Flags}
@@ -809,7 +905,7 @@ tracts_with_no_income_estimate_due_to_geography_missingness = hmda_final %>%
       T ~ NA_character_)) %>%
   filter(!is.na(errors))
 
-if (nrow(tracts_with_no_income_estimate_due_to_geography_missingness > 100)) { 
+if (nrow(tracts_with_no_income_estimate_due_to_geography_missingness) > 100) { 
   warning("More than 100 tracts have no income estimate due to geography missingness!") }
 
 ## reading in the codebook
